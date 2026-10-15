@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Neon Arena 3D — 1v1 MOBA</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -30,18 +30,19 @@
             user-select: none;
         }
 
+        html, body {
+            width: 100%;
+            height: 100%;
+        }
+
         body {
             font-family: 'Sora', sans-serif;
-            background:
-                radial-gradient(ellipse 80% 50% at 20% 20%, rgba(0, 120, 160, 0.18), transparent 55%),
-                radial-gradient(ellipse 70% 45% at 85% 75%, rgba(180, 20, 60, 0.14), transparent 50%),
-                radial-gradient(circle at 50% 50%, #0a1020 0%, var(--bg-deep) 70%);
+            background: #04060d;
             color: var(--text);
             overflow: hidden;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            display: block;
             min-height: 100vh;
+            min-height: 100dvh;
         }
 
         body::before {
@@ -57,23 +58,17 @@
         }
 
         #game-container {
-            position: relative;
-            width: min(1280px, 96vw);
-            height: min(720px, 72vw, 92vh);
-            aspect-ratio: 16 / 9;
-            border-radius: 18px;
+            position: fixed;
+            inset: 0;
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
+            max-width: none;
+            max-height: none;
+            border-radius: 0;
             overflow: hidden;
             background: #060a14;
-            box-shadow:
-                0 0 0 1px rgba(0, 232, 255, 0.2),
-                0 25px 80px rgba(0, 0, 0, 0.65),
-                var(--glow-cyan);
-            animation: frameIn 0.8s ease-out;
-        }
-
-        @keyframes frameIn {
-            from { opacity: 0; transform: scale(0.97) translateY(12px); }
-            to { opacity: 1; transform: scale(1) translateY(0); }
+            box-shadow: none;
         }
 
         #viewport {
@@ -1029,7 +1024,7 @@
             font-weight: 700;
             letter-spacing: 0.06em;
         }
-        .hud-hp-bar {
+        .hud-hp-bar, .hud-res-bar, .hud-xp-bar {
             width: 100%;
             height: 16px;
             background: #04060d;
@@ -1037,13 +1032,17 @@
             overflow: hidden;
             position: relative;
             border: 1px solid rgba(30, 41, 59, 0.9);
+            margin-top: 5px;
         }
-        .hud-hp-fill {
+        .hud-res-bar { height: 13px; }
+        .hud-xp-bar { height: 7px; border-radius: 4px; margin-bottom: 4px; }
+        .hud-hp-fill, .hud-res-fill, .hud-xp-fill {
             height: 100%;
             transition: width 0.1s linear;
             border-radius: 8px;
         }
-        .hud-hp-text {
+        .hud-xp-fill { background: linear-gradient(90deg, #a78bfa, #fbbf24); border-radius: 4px; }
+        .hud-hp-text, .hud-res-text {
             position: absolute;
             inset: 0;
             font-size: 10px;
@@ -1054,6 +1053,16 @@
             text-shadow: 0 1px 3px #000;
             letter-spacing: 0.04em;
         }
+        .hud-res-text { font-size: 9px; }
+        .hud-skill-points {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--gold);
+            margin: 6px 0 4px;
+            min-height: 14px;
+            letter-spacing: 0.03em;
+        }
+        .hud-skill-points:empty { display: none; margin: 0; min-height: 0; }
         .skills-row {
             display: flex;
             gap: 8px;
@@ -1067,7 +1076,19 @@
             position: relative;
             overflow: hidden;
             text-align: center;
-            transition: border-color 0.2s;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            cursor: default;
+        }
+        .skill-box.locked { opacity: 0.42; }
+        .skill-box.can-upgrade {
+            border-color: var(--gold);
+            box-shadow: 0 0 14px rgba(245, 197, 24, 0.45);
+            cursor: pointer;
+            animation: upgradePulse 1.1s ease-in-out infinite;
+        }
+        @keyframes upgradePulse {
+            0%, 100% { box-shadow: 0 0 8px rgba(245, 197, 24, 0.25); }
+            50% { box-shadow: 0 0 18px rgba(245, 197, 24, 0.7); }
         }
         .skill-key {
             font-size: 9px;
@@ -1086,6 +1107,22 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
+        .skill-rank {
+            font-size: 9px;
+            color: #94a3b8;
+            margin-top: 3px;
+            font-family: 'Orbitron', sans-serif;
+            letter-spacing: 0.04em;
+        }
+        .skill-rank .pip {
+            display: inline-block;
+            width: 6px; height: 6px;
+            border-radius: 1px;
+            background: rgba(148,163,184,0.22);
+            margin: 0 1px;
+            vertical-align: middle;
+        }
+        .skill-rank .pip.on { background: var(--gold); }
         .cd-overlay {
             position: absolute;
             inset: 0;
@@ -1098,6 +1135,39 @@
             font-weight: 700;
             color: var(--gold);
             opacity: 0;
+            pointer-events: none;
+        }
+        #respawn-overlay {
+            position: absolute;
+            inset: 0;
+            z-index: 9;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            background: radial-gradient(ellipse at center, rgba(4,6,13,0.55) 0%, rgba(4,6,13,0.12) 55%, transparent 72%);
+        }
+        #respawn-overlay.show { display: flex; }
+        #respawn-overlay .respawn-label {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 13px;
+            letter-spacing: 0.22em;
+            color: var(--muted);
+            margin-bottom: 6px;
+        }
+        #respawn-overlay .respawn-num {
+            font-family: 'Orbitron', sans-serif;
+            font-size: clamp(52px, 9vw, 90px);
+            font-weight: 900;
+            color: #fff;
+            text-shadow: 0 0 40px rgba(255,45,85,0.55);
+            line-height: 1;
+        }
+        #respawn-overlay .respawn-sub {
+            margin-top: 10px;
+            font-size: 13px;
+            color: var(--muted);
         }
 
         /* ========== GAME OVER ========== */
@@ -1281,7 +1351,13 @@
             <span class="match-timer" id="timer">00:00</span>
             <span class="score-box p2-score" id="p2-kills">0</span>
         </div>
-        <div class="control-hint-bar" id="control-hint-bar">Chuột phải/trái: di chuyển · Click địch: tấn · A đánh thường · Q/E chiêu · Space center · Cuộn zoom</div>
+        <div class="control-hint-bar" id="control-hint-bar">WASD di chuyển · F/Q/E chiêu · Ctrl+F/Q/E nâng cấp · Space camera</div>
+
+        <div id="respawn-overlay">
+            <div class="respawn-label">HỒI SINH SAU</div>
+            <div class="respawn-num" id="respawn-num">5.0</div>
+            <div class="respawn-sub">Bạn sẽ xuất hiện lại tại đài phun nước</div>
+        </div>
 
         <div class="player-hud p1-hud">
             <div class="hud-top">
@@ -1292,20 +1368,29 @@
                 <div class="hud-hp-fill" id="p1-hp-bar" style="background: linear-gradient(90deg, #00e8ff, #38bdf8); width: 100%;"></div>
                 <div class="hud-hp-text" id="p1-hp-text">1000 / 1000</div>
             </div>
+            <div class="hud-res-bar">
+                <div class="hud-res-fill" id="p1-res-bar" style="background: linear-gradient(90deg, #3b82f6, #60a5fa); width: 100%;"></div>
+                <div class="hud-res-text" id="p1-res-text">Nội lực 200 / 200</div>
+            </div>
+            <div class="hud-xp-bar"><div class="hud-xp-fill" id="p1-xp-bar" style="width: 0%"></div></div>
+            <div class="hud-skill-points" id="p1-skill-points"></div>
             <div class="skills-row">
-                <div class="skill-box">
-                    <span class="skill-key">[ A ]</span>
+                <div class="skill-box" data-upgrade="0" data-team="1">
+                    <span class="skill-key">[ F ]</span>
                     <div class="skill-title" id="p1-s1-name">Đánh Thường</div>
+                    <div class="skill-rank" id="p1-s1-rank"></div>
                     <div class="cd-overlay" id="p1-cd1"></div>
                 </div>
-                <div class="skill-box">
+                <div class="skill-box" data-upgrade="1" data-team="1">
                     <span class="skill-key">[ Q ]</span>
                     <div class="skill-title" id="p1-s2-name">Kỹ Năng</div>
+                    <div class="skill-rank" id="p1-s2-rank"></div>
                     <div class="cd-overlay" id="p1-cd2"></div>
                 </div>
-                <div class="skill-box">
+                <div class="skill-box" data-upgrade="2" data-team="1">
                     <span class="skill-key">[ E ]</span>
                     <div class="skill-title" id="p1-s3-name">Chiêu Cuối</div>
+                    <div class="skill-rank" id="p1-s3-rank"></div>
                     <div class="cd-overlay" id="p1-cd3"></div>
                 </div>
             </div>
@@ -1320,20 +1405,29 @@
                 <div class="hud-hp-fill" id="p2-hp-bar" style="background: linear-gradient(90deg, #ff2d55, #fb7185); width: 100%;"></div>
                 <div class="hud-hp-text" id="p2-hp-text">1000 / 1000</div>
             </div>
+            <div class="hud-res-bar">
+                <div class="hud-res-fill" id="p2-res-bar" style="background: linear-gradient(90deg, #22d3ee, #67e8f9); width: 100%;"></div>
+                <div class="hud-res-text" id="p2-res-text">Năng lượng 100 / 100</div>
+            </div>
+            <div class="hud-xp-bar"><div class="hud-xp-fill" id="p2-xp-bar" style="width: 0%"></div></div>
+            <div class="hud-skill-points" id="p2-skill-points"></div>
             <div class="skills-row">
-                <div class="skill-box">
-                    <span class="skill-key">A</span>
+                <div class="skill-box" data-upgrade="0" data-team="2">
+                    <span class="skill-key">1</span>
                     <div class="skill-title" id="p2-s1-name">Đánh Thường</div>
+                    <div class="skill-rank" id="p2-s1-rank"></div>
                     <div class="cd-overlay" id="p2-cd1"></div>
                 </div>
-                <div class="skill-box">
-                    <span class="skill-key">Q</span>
+                <div class="skill-box" data-upgrade="1" data-team="2">
+                    <span class="skill-key">2</span>
                     <div class="skill-title" id="p2-s2-name">Kỹ Năng</div>
+                    <div class="skill-rank" id="p2-s2-rank"></div>
                     <div class="cd-overlay" id="p2-cd2"></div>
                 </div>
-                <div class="skill-box">
-                    <span class="skill-key">E</span>
+                <div class="skill-box" data-upgrade="2" data-team="2">
+                    <span class="skill-key">3</span>
                     <div class="skill-title" id="p2-s3-name">Chiêu Cuối</div>
+                    <div class="skill-rank" id="p2-s3-rank"></div>
                     <div class="cd-overlay" id="p2-cd3"></div>
                 </div>
             </div>
@@ -1344,7 +1438,7 @@
                 <div id="joystick-base"><div id="joystick-knob"></div></div>
             </div>
             <div id="skill-pad">
-                <button type="button" class="mob-skill aa" data-act="aa">A<span class="cd" id="mob-cd-aa"></span></button>
+                <button type="button" class="mob-skill aa" data-act="aa">F<span class="cd" id="mob-cd-aa"></span></button>
                 <button type="button" class="mob-skill" data-act="1">Q<span class="cd" id="mob-cd-1"></span></button>
                 <button type="button" class="mob-skill" data-act="2">E<span class="cd" id="mob-cd-2"></span></button>
             </div>
@@ -1515,16 +1609,24 @@ document.getElementById('btn-back-from-join').addEventListener('click', () => sh
 const HEROES = [
     { id:'ignis', name:'IGNIS', role:'Pháp Sư Hỏa Cầu', color:'#ff6b35', icon:'🔥', hp:1200, speed:3.9, radius:20,
       desc:'Cấu rỉa tầm xa cực mạnh với cầu lửa nổ lan và bão thiên thạch hủy diệt.',
-      stats:{dmg:95,tank:40,spd:65}, skills:[{name:'Hỏa Tiễn',cd:0.38},{name:'Tia Lửa Nổ',cd:3.8},{name:'Vụ Nổ Thái Dương',cd:10.0}] },
+      stats:{dmg:95,tank:40,spd:65},
+      resource:{ type:'mana', name:'Nội lực', max:220, regen:11, color:'#3b82f6', color2:'#60a5fa' },
+      skills:[{name:'Hỏa Tiễn',cd:0.38,cost:0},{name:'Tia Lửa Nổ',cd:3.8,cost:55},{name:'Vụ Nổ Thái Dương',cd:10.0,cost:110}] },
     { id:'volt', name:'VOLT', role:'Sát Thủ Điện Quang', color:'#00f5d4', icon:'⚡', hp:1100, speed:4.7, radius:18,
       desc:'Cơ động bậc nhất. Khả năng lướt xuyên mục tiêu và phóng bão điện từ.',
-      stats:{dmg:90,tank:35,spd:100}, skills:[{name:'Phi Tiêu Điện',cd:0.28},{name:'Tốc Biến Điện',cd:3.2},{name:'Bão Điện Từ',cd:8.5}] },
+      stats:{dmg:90,tank:35,spd:100},
+      resource:{ type:'energy', name:'Năng lượng', max:100, regen:15, color:'#22d3ee', color2:'#67e8f9' },
+      skills:[{name:'Phi Tiêu Điện',cd:0.28,cost:0},{name:'Tốc Biến Điện',cd:3.2,cost:40},{name:'Bão Điện Từ',cd:8.5,cost:80}] },
     { id:'aegis', name:'AEGIS', role:'Đấu Sĩ Tinh Vân', color:'#f7b801', icon:'🛡️', hp:1750, speed:3.5, radius:24,
       desc:'Cỗ xe tăng thực thụ với lượng máu khổng lồ, tạo khiên chắn và dậm đất làm choáng.',
-      stats:{dmg:65,tank:100,spd:50}, skills:[{name:'Trọng Kích',cd:0.48},{name:'Khiên Tinh Vân',cd:5.0},{name:'Địa Chấn',cd:9.0}] },
+      stats:{dmg:65,tank:100,spd:50},
+      resource:{ type:'fury', name:'Nộ khí', max:100, regen:4, color:'#f97316', color2:'#fb923c' },
+      skills:[{name:'Trọng Kích',cd:0.48,cost:0},{name:'Khiên Tinh Vân',cd:5.0,cost:35},{name:'Địa Chấn',cd:9.0,cost:70}] },
     { id:'sylph', name:'SYLPH', role:'Xạ Thủ Ngân Hà', color:'#b5179e', icon:'🏹', hp:1150, speed:4.3, radius:19,
       desc:'Bắn tên ánh sáng tốc độ cao, bắn chùm 5 mũi tên và mưa tên xuyên phá.',
-      stats:{dmg:100,tank:30,spd:85}, skills:[{name:'Tên Ánh Sáng',cd:0.26},{name:'Loạt Tên Ngân Hà',cd:3.2},{name:'Mũi Tên Phán Quyết',cd:8.0}] }
+      stats:{dmg:100,tank:30,spd:85},
+      resource:{ type:'focus', name:'Tinh lực', max:180, regen:10, color:'#c026d3', color2:'#e879f9' },
+      skills:[{name:'Tên Ánh Sáng',cd:0.26,cost:0},{name:'Loạt Tên Ngân Hà',cd:3.2,cost:50},{name:'Mũi Tên Phán Quyết',cd:8.0,cost:95}] }
 ];
 
 let p1Pick = 0, p2Pick = 1;
@@ -1532,7 +1634,7 @@ let p1Pick = 0, p2Pick = 1;
 function renderPickShowcase(el, hero, teamLabel, accent) {
     if (!el || !hero) return;
     el.style.setProperty('--accent', accent);
-    const keys = ['A', 'Q', 'E'];
+    const keys = ['F', 'Q', 'E'];
     el.innerHTML = `
         <div class="pick-portrait" style="--accent:${accent}; border-color:${hero.color}; box-shadow:0 0 28px ${hero.color}">${hero.icon}</div>
         <div class="pick-meta">
@@ -1763,7 +1865,7 @@ function initThree() {
     scene = new THREE.Scene();
     scene.fog = null; // fog tắt để nhẹ GPU
 
-    camera = new THREE.PerspectiveCamera(34, 16 / 9, 0.5, 250);
+    camera = new THREE.PerspectiveCamera(38, window.innerWidth / Math.max(1, window.innerHeight), 0.5, 250);
     camLook.set(0, 0.8, 0);
     camera.position.copy(getIdealCameraPos(camLook));
     camera.lookAt(camLook);
@@ -2508,17 +2610,29 @@ class Player {
         this.radius = heroData.radius;
         this.isLocal = !!opts.isLocal;
         this.isAI = !!opts.isAI;
-        // Người chơi khỏe hơn · AI yếu hơn
-        const hpMul = this.isAI ? 0.72 : 1.15;
-        const spdMul = this.isAI ? 0.88 : 1.25;
+        // Cân bằng công bằng: người chơi dễ điều khiển · AI mạnh nhờ chơi thông minh
+        const hpMul = this.isAI ? 1.0 : 1.15;
+        const spdMul = this.isAI ? 1.05 : 1.22;
         this.maxHp = Math.round(heroData.hp * hpMul); this.hp = this.maxHp;
         this.speed = heroData.speed * spdMul;
-        this.dmgMul = this.isAI ? 0.65 : 1.2;
+        this.dmgMul = this.isAI ? 0.95 : 1.15;
+        this.aaRange = 250;
+        const res = heroData.resource;
+        this.resourceType = res.type;
+        this.resourceName = res.name;
+        this.maxResource = res.max;
+        this.resource = res.max;
+        this.resourceRegen = res.regen;
+        this.resourceColor = res.color;
+        this.resourceColor2 = res.color2 || res.color;
         this.moveTarget = null;
         this.attackTarget = null;
         this.aimAngle = team === 1 ? 0 : Math.PI;
-        this.level = 1; this.xp = 0; this.kills = 0;
+        this.level = 1; this.xp = 0; this.xpToLevel = 100; this.kills = 0;
         this.cds = [0, 0, 0];
+        this.skillRanks = [1, 0, 0]; // AA mở sẵn cấp 1
+        this.maxSkillRanks = [5, 5, 3];
+        this.skillPoints = 1; // điểm nâng cấp lúc đầu → mở Q
         this.shield = 0; this.shieldTimer = 0;
         this.stunTimer = 0;
         this.dead = false; this.respawnTimer = 0;
@@ -2528,33 +2642,72 @@ class Player {
         this.mesh = createHeroMesh(heroData, team);
         this.mesh.position.set(wx(x), 0, wz(y));
         scene.add(this.mesh);
+        if (this.isAI) this.autoUpgradeSkills();
+    }
+    canUpgradeSkill(slot) {
+        if (this.skillPoints <= 0) return false;
+        if (this.skillRanks[slot] >= this.maxSkillRanks[slot]) return false;
+        if (slot === 2 && this.level < 6) return false; // chiêu cuối mở từ cấp 6
+        return true;
+    }
+    upgradeSkill(slot) {
+        if (!this.canUpgradeSkill(slot)) return false;
+        this.skillRanks[slot]++;
+        this.skillPoints--;
+        spawnParticles(this.x, this.y, 16, '#fbbf24', 4, 4, 0.45);
+        addFloatingText(this.x, this.y - 20, `NÂNG CẤP ${['F','Q','E'][slot]} → ${this.skillRanks[slot]}`, '#fbbf24', 15);
+        return true;
+    }
+    autoUpgradeSkills() {
+        // AI / auto: ưu tiên Q → Ult (cấp 6+) → AA → max Q
+        while (this.skillPoints > 0) {
+            let picked = -1;
+            const order = [1, 2, 0, 1, 0, 2, 1, 0];
+            for (const s of order) {
+                if (this.canUpgradeSkill(s)) { picked = s; break; }
+            }
+            if (picked < 0) break;
+            this.upgradeSkill(picked);
+        }
     }
     gainXp(amount) {
-        // Người chơi lên cấp nhanh hơn
         this.xp += this.isLocal ? amount * 1.35 : amount;
-        if (this.xp >= 100 && this.level < 10) {
-            this.xp -= 100; this.level++;
-            this.maxHp += this.isAI ? 80 : 150;
-            this.hp = Math.min(this.maxHp, this.hp + (this.isAI ? 160 : 320));
+        while (this.xp >= this.xpToLevel && this.level < 10) {
+            this.xp -= this.xpToLevel;
+            this.level++;
+            this.xpToLevel = Math.round(90 + this.level * 18);
+            this.skillPoints++;
+            this.maxHp += this.isAI ? 80 : 120;
+            this.maxResource = Math.round(this.maxResource + (this.resourceType === 'energy' || this.resourceType === 'fury' ? 0 : 12));
+            this.hp = Math.min(this.maxHp, this.hp + (this.isAI ? 140 : 260));
+            this.resource = Math.min(this.maxResource, this.resource + this.maxResource * 0.35);
             spawnParticles(this.x, this.y, 28, '#fbbf24', 6, 5, 0.7);
-            addFloatingText(this.x, this.y, `LÊN CẤP ${this.level}!`, '#fbbf24', 18);
+            addFloatingText(this.x, this.y, `LÊN CẤP ${this.level}! +1 điểm chiêu`, '#fbbf24', 18);
+            if (this.isAI || this.isHotseat) this.autoUpgradeSkills();
         }
     }
     takeDamage(dmg, attackerPlayer = null) {
         if (this.dead) return;
         let actualDmg = dmg;
-        // Người chơi chịu ít sát thương hơn
-        if (this.isLocal) actualDmg *= 0.75;
-        if (attackerPlayer && attackerPlayer.isAI) actualDmg *= 0.7;
+        if (this.isLocal) actualDmg *= 0.88;
+        if (attackerPlayer && attackerPlayer.isAI) actualDmg *= 0.9;
         if (this.shield > 0) {
             if (this.shield >= actualDmg) { this.shield -= actualDmg; actualDmg = 0; }
             else { actualDmg -= this.shield; this.shield = 0; }
         }
         this.hp -= actualDmg;
+        if (this.resourceType === 'fury' && actualDmg > 0) {
+            this.resource = Math.min(this.maxResource, this.resource + actualDmg * 0.04);
+        }
+        if (attackerPlayer && attackerPlayer.resourceType === 'fury') {
+            attackerPlayer.resource = Math.min(attackerPlayer.maxResource, attackerPlayer.resource + 6);
+        }
         addFloatingText(this.x + (Math.random() - 0.5) * 20, this.y, `-${Math.round(actualDmg)}`, '#f87171', 15);
         if (this.hp <= 0) {
             this.hp = 0; this.dead = true;
-            this.respawnTimer = this.isLocal ? (2.5 + this.level * 0.3) : (5 + this.level * 0.6);
+            // Thời gian hồi sinh tăng theo cấp
+            this.respawnTimer = 4 + this.level * 0.85;
+            if (this.isLocal) this.respawnTimer *= 0.85;
             spawnParticles(this.x, this.y, 45, this.hero.color, 7, 6, 0.9);
             screenShake = 12;
             this.mesh.visible = false;
@@ -2583,18 +2736,41 @@ class Player {
         this.moveTarget = null;
         if (moveMarker) moveMarker.visible = false;
     }
-    getAimAngle() {
-        if (this.isLocal) {
-            return Math.atan2(mouseMap.y - this.y, mouseMap.x - this.x);
+    findNearestEnemy(maxRange = 520) {
+        let best = null, bestD = maxRange;
+        const pool = [
+            ...players.filter(p => p.team !== this.team && !p.dead),
+            ...minions.filter(m => m.team !== this.team),
+            ...towers.filter(t => t.team !== this.team)
+        ];
+        for (const e of pool) {
+            const d = Math.hypot(e.x - this.x, e.y - this.y) - (e.radius || 0);
+            if (d < bestD) { bestD = d; best = e; }
         }
-        if (this.attackTarget && !this.attackTarget.dead && this.attackTarget.hp > 0) {
+        return best;
+    }
+    getAimAngle() {
+        // Ưu tiên: attack target → địch gần → chuột (local) → hướng đang nhìn
+        if (this.attackTarget && !this.attackTarget.dead && (this.attackTarget.hp === undefined || this.attackTarget.hp > 0)) {
             return Math.atan2(this.attackTarget.y - this.y, this.attackTarget.x - this.x);
         }
+        const near = this.findNearestEnemy(this.isLocal ? 420 : 480);
+        if (near) return Math.atan2(near.y - this.y, near.x - this.x);
+        if (this.isLocal) return Math.atan2(mouseMap.y - this.y, mouseMap.x - this.x);
         return this.aimAngle;
     }
     tryCast(slot) {
         if (this.dead || this.stunTimer > 0) return;
         if (this.cds[slot] > 0) return;
+        if ((this.skillRanks[slot] || 0) < 1) {
+            if (this.isLocal) addFloatingText(this.x, this.y, 'Chiêu chưa nâng cấp!', '#fbbf24', 13);
+            return;
+        }
+        const cost = (this.hero.skills[slot].cost || 0);
+        if (cost > 0 && this.resource < cost) {
+            if (this.isLocal) addFloatingText(this.x, this.y, `Thiếu ${this.resourceName}!`, this.resourceColor, 13);
+            return;
+        }
         const ang = this.getAimAngle();
         this.aimAngle = ang;
         this.castSkill(slot, ang, ang);
@@ -2631,8 +2807,8 @@ class Player {
             m.team === this.team && Math.hypot(m.x - tower.x, m.y - tower.y) < tower.range * 0.8
         ).length;
         const hpRatio = this.hp / this.maxHp;
-        if (this.isAI) return tanks >= 3 && hpRatio >= 0.7; // AI gần như không dive
-        return tanks >= 2 && hpRatio >= 0.45; // người chơi dễ đẩy trụ hơn
+        if (this.isAI) return tanks >= 2 && hpRatio >= 0.55;
+        return tanks >= 2 && hpRatio >= 0.4;
     }
     fleeFromTower(tower, dt) {
         const ang = Math.atan2(this.y - tower.y, this.x - tower.x);
@@ -2642,6 +2818,14 @@ class Player {
         const my = Math.sin(ang) * 0.55 + Math.sin(homeAng) * 0.45;
         const len = Math.hypot(mx, my) || 1;
         this.moveToward(this.x + (mx / len) * 120, this.y + (my / len) * 120, dt, 8);
+    }
+    aimAtEntity(ent, lead = 0) {
+        let ax = ent.x, ay = ent.y;
+        if (lead > 0 && ent.aimAngle != null) {
+            ax += Math.cos(ent.aimAngle) * lead;
+            ay += Math.sin(ent.aimAngle) * lead;
+        }
+        this.aimAngle = Math.atan2(ay - this.y, ax - this.x);
     }
     updateAI(dt) {
         this.aiTimer -= dt;
@@ -2654,29 +2838,88 @@ class Player {
         const enemyMinions = minions.filter(m => m.team !== this.team);
         const allyMinions = minions.filter(m => m.team === this.team);
         const dangerTower = this.nearestEnemyTower();
-
         const hpRatio = this.hp / this.maxHp;
         const inFountain = Math.hypot(this.x - this.spawnX, this.y - this.spawnY) < 140;
+        const ranged = this.hero.id === 'ignis' || this.hero.id === 'sylph';
+        const aaRange = this.aaRange || 250;
+        const enemyDist = enemy ? Math.hypot(enemy.x - this.x, enemy.y - this.y) : 9999;
+        const enemyHp = enemy ? enemy.hp / enemy.maxHp : 1;
 
-        // --- Đang dính tầm trụ mà không đủ điều kiện dive → rút ngay ---
+        const safeMove = (tx, ty) => {
+            const danger = this.towerDangerAt(tx, ty, 18);
+            if (danger && !this.canDiveTower(danger)) {
+                const ang = Math.atan2(this.y - danger.y, this.x - danger.x);
+                const safeR = danger.range + 55;
+                tx = danger.x + Math.cos(ang) * safeR;
+                ty = danger.y + Math.sin(ang) * safeR;
+            }
+            this.moveToward(tx, ty, dt, 10);
+        };
+
+        const fireAA = (tgt) => {
+            if (!tgt || this.cds[0] > 0) return;
+            const d = Math.hypot(tgt.x - this.x, tgt.y - this.y) - (tgt.radius || 0);
+            if (d > aaRange) return;
+            this.aimAtEntity(tgt, tgt === enemy ? 35 : 0);
+            this.tryCast(0);
+        };
+
+        const useSkills = (tgt, mode, dist) => {
+            if (this.aiTimer > 0) return;
+            const canQ = this.cds[1] <= 0 && this.skillRanks[1] > 0;
+            const canE = this.cds[2] <= 0 && this.skillRanks[2] > 0;
+            if (!canQ && !canE) return;
+            this.aiTimer = 0.35 + Math.random() * 0.45;
+            this.aimAtEntity(tgt, tgt === enemy ? 55 : 10);
+
+            // Khiên / né khi máu thấp
+            if (this.hero.id === 'aegis' && canQ && hpRatio < 0.55 && enemyDist < 380) {
+                this.tryCast(1); return;
+            }
+            if (this.hero.id === 'volt' && canQ && hpRatio < 0.4 && enemyDist < 260) {
+                this.aimAngle = Math.atan2(this.spawnY - this.y, this.spawnX - this.x);
+                this.tryCast(1); return;
+            }
+
+            if (mode === 'allin') {
+                if (canQ) this.tryCast(1);
+                if (canE && dist < 320) this.tryCast(2);
+            } else if (mode === 'poke') {
+                if (canQ && dist < 420) this.tryCast(1);
+                if (canE && (enemyHp < 0.5 || dist < 260)) this.tryCast(2);
+            } else if (mode === 'clear') {
+                // Clear sóng khi nhiều lính tụ
+                if (canQ && dist < 280) this.tryCast(1);
+                if (canE && enemyMinions.filter(m => Math.hypot(m.x - this.x, m.y - this.y) < 200).length >= 3) this.tryCast(2);
+            } else if (mode === 'push' || mode === 'objective') {
+                if (canQ && dist < 280) this.tryCast(1);
+                if (canE && dist < 240) this.tryCast(2);
+            } else if (mode === 'farm' && canQ && dist < 180 && Math.random() < 0.25) {
+                this.tryCast(1);
+            }
+        };
+
+        // --- Không đứng dưới trụ nếu chưa dive được ---
         if (dangerTower) {
-            const inRange = Math.hypot(dangerTower.x - this.x, dangerTower.y - this.y) < dangerTower.range - 15;
+            const inRange = Math.hypot(dangerTower.x - this.x, dangerTower.y - this.y) < dangerTower.range - 12;
             if (inRange && !this.canDiveTower(dangerTower)) {
                 this.fleeFromTower(dangerTower, dt);
-                if (enemy && Math.hypot(enemy.x - this.x, enemy.y - this.y) < 300 && this.cds[0] <= 0) {
-                    this.aimAngle = Math.atan2(enemy.y - this.y, enemy.x - this.x);
-                    this.tryCast(0);
-                }
+                const kite = enemy && enemyDist < 320 ? enemy : enemyMinions
+                    .filter(m => !this.towerDangerAt(m.x, m.y, 20))
+                    .sort((a, b) => Math.hypot(a.x - this.x, a.y - this.y) - Math.hypot(b.x - this.x, b.y - this.y))[0];
+                if (kite) { fireAA(kite); useSkills(kite, 'poke', Math.hypot(kite.x - this.x, kite.y - this.y)); }
                 return;
             }
         }
 
-        // --- Hồi máu / rút về (AI nhát hơn) ---
-        if (hpRatio < 0.4 || (this.aiRetreat && hpRatio < 0.7)) {
-            this.aiRetreat = hpRatio < 0.85;
+        // --- Rút về khi máu thấp (vẫn bắn khi bị đuổi) ---
+        if (hpRatio < 0.28 || (this.aiRetreat && hpRatio < 0.55)) {
+            this.aiRetreat = hpRatio < 0.72;
             this.moveToward(this.spawnX, this.spawnY, dt, 40);
-            this.aimAngle = enemy ? Math.atan2(enemy.y - this.y, enemy.x - this.x) : this.aimAngle;
-            if (enemy && Math.hypot(enemy.x - this.x, enemy.y - this.y) < 280) {
+            if (enemy && enemyDist < 340) {
+                this.aimAtEntity(enemy, 40);
+                fireAA(enemy);
+                useSkills(enemy, 'poke', enemyDist);
                 if (this.hero.id === 'volt' && this.cds[1] <= 0) {
                     this.aimAngle = Math.atan2(this.spawnY - this.y, this.spawnX - this.x);
                     this.tryCast(1);
@@ -2686,40 +2929,56 @@ class Player {
         }
         this.aiRetreat = false;
 
-        if (inFountain && hpRatio < 0.85) {
-            if (enemy && Math.hypot(enemy.x - this.x, enemy.y - this.y) < 500 && this.cds[0] <= 0) {
-                this.aimAngle = Math.atan2(enemy.y - this.y, enemy.x - this.x);
-                this.tryCast(0);
-            }
+        if (inFountain && hpRatio < 0.92) {
+            if (enemy && enemyDist < 520) fireAA(enemy);
             return;
         }
 
-        // --- Chọn mục tiêu ---
-        let target = null;
-        let mode = 'push';
+        // Heal rune an toàn
+        if (healRune.active && hpRatio < 0.7) {
+            const rd = Math.hypot(healRune.x - this.x, healRune.y - this.y);
+            if (rd < 480 && (!enemy || enemyDist > 300) && !this.towerDangerAt(healRune.x, healRune.y, 25)) {
+                safeMove(healRune.x, healRune.y);
+                return;
+            }
+        }
 
+        // --- Chọn mục tiêu thông minh ---
+        let target = null, mode = 'push';
+
+        // Last-hit ưu tiên
         let lh = null, lhScore = 1e9;
+        const aaDmg = 55 * (this.dmgMul || 1) * (1 + (this.level - 1) * 0.12);
         for (const m of enemyMinions) {
-            // Không last-hit lính đang nằm sâu trong trụ địch nếu chưa dive được
-            const nearTower = this.towerDangerAt(m.x, m.y, 40);
+            const nearTower = this.towerDangerAt(m.x, m.y, 35);
             if (nearTower && !this.canDiveTower(nearTower)) continue;
             const d = Math.hypot(m.x - this.x, m.y - this.y);
-            if (d < 380 && m.hp <= 90 + this.level * 8 && d < lhScore) {
+            if (d < 400 && m.hp <= aaDmg * 1.35 + 20 && d < lhScore) {
                 lh = m; lhScore = d;
             }
         }
 
-        const enemyDist = enemy ? Math.hypot(enemy.x - this.x, enemy.y - this.y) : 9999;
-        const enemyHp = enemy ? enemy.hp / enemy.maxHp : 1;
-        // Không đuổi tướng vào dưới trụ
-        const enemyUnderTower = enemy && this.towerDangerAt(enemy.x, enemy.y, 20);
+        // Clear wave: nhiều lính gần
+        const nearbyMinions = enemyMinions.filter(m => {
+            if (Math.hypot(m.x - this.x, m.y - this.y) > 320) return false;
+            const nt = this.towerDangerAt(m.x, m.y, 30);
+            return !nt || this.canDiveTower(nt);
+        });
 
-        if (lh && (!enemy || enemyDist > 320 || enemyHp > 0.45)) {
+        const enemyUnderTower = enemy && this.towerDangerAt(enemy.x, enemy.y, 18);
+        const canFightEnemy = enemy && enemyDist < 520 && !(enemyUnderTower && !this.canDiveTower(enemyUnderTower));
+
+        // Finish low HP hero
+        if (canFightEnemy && enemyHp < 0.35 && hpRatio > 0.4) {
+            target = enemy; mode = 'allin';
+        } else if (lh && (!canFightEnemy || enemyDist > 300 || enemyHp > 0.55)) {
             target = lh; mode = 'farm';
-        } else if (enemy && enemyDist < 480 && !(enemyUnderTower && !this.canDiveTower(enemyUnderTower))) {
+        } else if (canFightEnemy && (enemyDist < 420 || enemyHp < 0.6)) {
             target = enemy;
-            // AI ít all-in hơn
-            mode = (enemyHp < 0.22 && hpRatio > 0.6) ? 'allin' : 'poke';
+            mode = (enemyHp < 0.28 && hpRatio > 0.5) ? 'allin' : 'poke';
+        } else if (nearbyMinions.length >= 2) {
+            target = nearbyMinions.sort((a, b) => a.hp - b.hp)[0];
+            mode = nearbyMinions.length >= 3 ? 'clear' : 'farm';
         } else if (enemyOuter) {
             target = enemyOuter; mode = 'push';
         } else if (enemyNexus) {
@@ -2727,100 +2986,71 @@ class Player {
         }
         if (!target) return;
 
-        const ranged = this.hero.id === 'ignis' || this.hero.id === 'sylph';
-        let prefer = mode === 'farm' ? 100
-            : mode === 'poke' ? (ranged ? 260 : 170)
-            : mode === 'allin' ? (ranged ? 200 : 110)
-            : 170;
+        let prefer = mode === 'farm' || mode === 'clear' ? 110
+            : mode === 'poke' ? (ranged ? 250 : 155)
+            : mode === 'allin' ? (ranged ? 190 : 100)
+            : 165;
 
-        // Push trụ: đứng NGOÀI tầm trụ chờ lính; chỉ vào khi dive được
+        // Siege: đứng sau lính / ngoài tầm trụ
         if ((mode === 'push' || mode === 'objective') && target.range) {
             if (this.canDiveTower(target)) {
-                prefer = target.radius + 90; // vào đánh trụ
+                prefer = target.radius + 85;
             } else {
-                prefer = target.range + 40; // đứng ngoài vòng trụ
-                // Ưu tiên đánh lính ngoài tầm trụ trước
+                const frontAlly = allyMinions
+                    .filter(m => Math.hypot(m.x - target.x, m.y - target.y) < target.range + 80)
+                    .sort((a, b) => Math.hypot(a.x - target.x, a.y - target.y) - Math.hypot(b.x - target.x, b.y - target.y))[0];
+                if (frontAlly) {
+                    // Đứng sau lính đồng minh
+                    const ang = Math.atan2(this.spawnY - target.y, this.spawnX - target.x);
+                    prefer = 0;
+                    safeMove(frontAlly.x + Math.cos(ang) * 70, frontAlly.y + Math.sin(ang) * 70);
+                } else {
+                    prefer = target.range + 45;
+                }
                 const safeMinion = enemyMinions
-                    .filter(m => !this.towerDangerAt(m.x, m.y, 30))
+                    .filter(m => !this.towerDangerAt(m.x, m.y, 28))
                     .sort((a, b) => Math.hypot(a.x - this.x, a.y - this.y) - Math.hypot(b.x - this.x, b.y - this.y))[0];
                 if (safeMinion) {
                     target = safeMinion;
                     mode = 'farm';
-                    prefer = 100;
+                    prefer = 105;
                 }
             }
         }
 
         const dist = Math.hypot(target.x - this.x, target.y - this.y);
 
-        // Di chuyển — không bước vào ô bị trụ cover
-        const tryMove = (tx, ty) => {
-            const danger = this.towerDangerAt(tx, ty, 20);
-            if (danger && !this.canDiveTower(danger)) {
-                // Đi tới điểm an toàn sát mép tầm trụ
-                const ang = Math.atan2(this.y - danger.y, this.x - danger.x);
-                const safeR = danger.range + 50;
-                tx = danger.x + Math.cos(ang) * safeR;
-                ty = danger.y + Math.sin(ang) * safeR;
-            }
-            this.moveToward(tx, ty, dt, 12);
-        };
-
-        if (mode === 'poke' && enemy && enemyDist < prefer * 0.72 && ranged) {
+        // Di chuyển / kite
+        if (mode === 'poke' && enemy && enemyDist < prefer * 0.7 && ranged) {
             const away = Math.atan2(this.y - enemy.y, this.x - enemy.x);
-            tryMove(this.x + Math.cos(away) * 80, this.y + Math.sin(away) * 80);
-        } else if (dist > prefer) {
-            const jitter = Math.sin(matchTime * 1.7 + this.team) * 40;
-            tryMove(target.x, target.y + jitter);
-        } else if ((mode === 'push' || mode === 'objective') && target.range && dist < prefer - 30 && !this.canDiveTower(target)) {
-            // Đang quá gần trụ dù chưa được dive → lui ra
+            // Strafe ngang thay vì lùi thẳng
+            const side = away + Math.PI * 0.5 * (Math.sin(matchTime * 2.2) > 0 ? 1 : -1);
+            safeMove(this.x + Math.cos(side) * 70 + Math.cos(away) * 40, this.y + Math.sin(side) * 70 + Math.sin(away) * 40);
+        } else if (prefer > 0 && dist > prefer) {
+            const jitter = Math.sin(matchTime * 2.1 + this.team) * 35;
+            safeMove(target.x + jitter, target.y - jitter * 0.4);
+        } else if ((mode === 'push' || mode === 'objective') && target.range && dist < prefer - 25 && !this.canDiveTower(target)) {
             this.fleeFromTower(target, dt);
+        } else if (mode === 'allin' && dist > prefer) {
+            safeMove(target.x, target.y);
         }
 
-        let aimX = target.x, aimY = target.y;
-        if (target === enemy && enemy) {
-            aimX += Math.cos(enemy.aimAngle || 0) * 25;
-            aimY += Math.sin(enemy.aimAngle || 0) * 25;
-        }
-        this.aimAngle = Math.atan2(aimY - this.y, aimX - this.x);
-
-        // Chỉ bắn trụ khi đang được phép dive hoặc đứng đánh từ ngoài (không thể) — tức chỉ khi dive
         const attackingTower = target.range != null;
-        const mayHitTower = !attackingTower || this.canDiveTower(target);
-        const inRange = dist < (mode === 'farm' ? 240 : attackingTower ? 200 : 440);
-
-        if (inRange && mayHitTower && this.cds[0] <= 0) this.tryCast(0);
-
-        if (this.aiTimer <= 0 && inRange && mayHitTower) {
-            this.aiTimer = 1.1 + Math.random() * 1.2; // AI đánh chiêu chậm hơn
-            const canQ = this.cds[1] <= 0;
-            const canE = this.cds[2] <= 0;
-
-            if (mode === 'allin') {
-                if (canQ) this.tryCast(1);
-                if (canE && (enemyHp < 0.5 || dist < 220)) this.tryCast(2);
-            } else if (mode === 'poke') {
-                if (canQ && dist < 380) this.tryCast(1);
-                if (canE && enemyHp < 0.45 && dist < 300) this.tryCast(2);
-            } else if (mode === 'push' || mode === 'objective') {
-                if (canQ && dist < 300) this.tryCast(1);
-                if (canE && dist < 250 && Math.random() < 0.35) this.tryCast(2);
-            } else if (mode === 'farm') {
-                if (canQ && dist < 200 && Math.random() < 0.2) this.tryCast(1);
+        const mayHit = !attackingTower || this.canDiveTower(target);
+        if (mayHit) {
+            fireAA(target);
+            // Ưu tiên bắn hero nếu trong tầm dù đang farm
+            if (mode !== 'allin' && enemy && enemyDist <= aaRange + 10 && !(enemyUnderTower && !this.canDiveTower(enemyUnderTower))) {
+                fireAA(enemy);
             }
-            if (this.hero.id === 'aegis' && canQ && hpRatio < 0.6 && enemyDist < 350) this.tryCast(1);
-        }
-
-        // Heal rune — không lấy nếu phải chạy xuyên tầm trụ
-        if (healRune.active && hpRatio < 0.75) {
-            const rd = Math.hypot(healRune.x - this.x, healRune.y - this.y);
-            if (rd < 420 && (!enemy || enemyDist > 280) && !this.towerDangerAt(healRune.x, healRune.y, 30)) {
-                tryMove(healRune.x, healRune.y);
-            }
+            useSkills(target === enemy || mode === 'allin' || mode === 'poke' ? (enemy || target) : target, mode, dist);
         }
     }
     updateLocal(dt) {
-        // Joystick ưu tiên (mobile)
+        const range = this.aaRange || 250;
+        let usedMove = false;
+
+        // Joystick (mobile)
         if (joystick.active && (Math.abs(joystick.dx) > 0.12 || Math.abs(joystick.dy) > 0.12)) {
             this.moveTarget = null;
             this.attackTarget = null;
@@ -2828,50 +3058,79 @@ class Player {
             this.x += joystick.dx * this.speed * (dt * 60);
             this.y += joystick.dy * this.speed * (dt * 60);
             this.aimAngle = Math.atan2(joystick.dy, joystick.dx);
-            if (Math.random() < 0.3) particles.push(new Particle(this.x, this.y, 0, 0, 4, this.hero.color, 0.25));
-        } else if (this.attackTarget && !this.attackTarget.dead && (this.attackTarget.hp === undefined || this.attackTarget.hp > 0)) {
+            usedMove = true;
+        }
+
+        // WASD di chuyển
+        if (!usedMove) {
+            let dx = 0, dy = 0;
+            if (keys['KeyW']) dy -= 1;
+            if (keys['KeyS']) dy += 1;
+            if (keys['KeyA']) dx -= 1;
+            if (keys['KeyD']) dx += 1;
+            if (dx || dy) {
+                const len = Math.hypot(dx, dy);
+                this.moveTarget = null;
+                this.attackTarget = null;
+                if (moveMarker) moveMarker.visible = false;
+                this.x += (dx / len) * this.speed * (dt * 60);
+                this.y += (dy / len) * this.speed * (dt * 60);
+                this.aimAngle = Math.atan2(dy, dx);
+                usedMove = true;
+            }
+        }
+
+        // Click: đuổi đánh / di chuyển
+        if (!usedMove && this.attackTarget && !this.attackTarget.dead && (this.attackTarget.hp === undefined || this.attackTarget.hp > 0)) {
             const t = this.attackTarget;
             const dist = Math.hypot(t.x - this.x, t.y - this.y) - (t.radius || 20);
-            const range = 220;
             if (dist > range * 0.85) this.moveToward(t.x, t.y, dt, range * 0.8);
             this.aimAngle = Math.atan2(t.y - this.y, t.x - this.x);
             if (dist <= range && this.cds[0] <= 0) this.tryCast(0);
-        } else if (this.moveTarget) {
+            usedMove = true;
+        } else if (!usedMove && this.moveTarget) {
             const moving = this.moveToward(this.moveTarget.x, this.moveTarget.y, dt, 10);
             if (!moving) {
                 this.moveTarget = null;
                 if (moveMarker) moveMarker.visible = false;
             } else if (moveMarker) {
-                const pulse = 1 + Math.sin(matchTime * 8) * 0.15;
-                moveMarker.scale.setScalar(pulse);
+                moveMarker.scale.setScalar(1 + Math.sin(matchTime * 8) * 0.15);
             }
         }
 
-        // Skill queue từ phím / nút mobile
         while (skillQueue.length) {
             const cmd = skillQueue.shift();
             if (cmd.aa) this.tryCast(0);
             else if (cmd.slot !== undefined) this.tryCast(cmd.slot);
         }
 
-        // Phím giữ A để spam đánh thường hướng chuột
-        if (keys['KeyA'] && this.cds[0] <= 0) this.tryCast(0);
+        // Chỉ đánh thường khi giữ F (không tự đánh)
+        if (keys['KeyF'] && this.cds[0] <= 0) this.tryCast(0);
     }
     update(dt) {
         if (this.dead) {
             this.respawnTimer -= dt;
             if (this.respawnTimer <= 0) {
-                this.dead = false; this.hp = this.maxHp;
+                this.dead = false;
+                this.hp = this.maxHp;
+                this.resource = this.maxResource;
                 this.x = this.spawnX; this.y = this.spawnY;
                 this.mesh.visible = true;
                 this.moveTarget = null; this.attackTarget = null;
                 spawnParticles(this.x, this.y, 30, '#ffffff', 5, 5, 0.6);
+                addFloatingText(this.x, this.y, 'HỒI SINH!', '#86efac', 16);
             }
             return;
         }
+        // Hồi tài nguyên
+        let regenRate = this.resourceRegen;
+        if (this.resourceType === 'fury') regenRate *= (this.hp / this.maxHp < 0.5 ? 1.6 : 1);
+        this.resource = Math.min(this.maxResource, this.resource + regenRate * dt);
+
         if (Math.hypot(this.x - this.spawnX, this.y - this.spawnY) < 140) {
             const regen = this.isLocal ? 280 : 140;
             if (this.hp < this.maxHp) this.hp = Math.min(this.maxHp, this.hp + regen * dt);
+            this.resource = Math.min(this.maxResource, this.resource + this.resourceRegen * 2.5 * dt);
         }
         for (let i = 0; i < 3; i++) if (this.cds[i] > 0) this.cds[i] = Math.max(0, this.cds[i] - dt);
         if (this.shieldTimer > 0) {
@@ -2904,9 +3163,10 @@ class Player {
         if (enemy && Math.hypot(enemy.x - this.x, enemy.y - this.y) < 480) {
             ang = Math.atan2(enemy.y - this.y, enemy.x - this.x);
         }
-        if (keys['Digit1'] && this.cds[0] <= 0) { this.aimAngle = ang; this.castSkill(0, ang, ang); }
-        if (keys['Digit2'] && this.cds[1] <= 0) { this.aimAngle = ang; this.castSkill(1, ang, ang); }
-        if (keys['Digit3'] && this.cds[2] <= 0) { this.aimAngle = ang; this.castSkill(2, ang, ang); }
+        this.aimAngle = ang;
+        if (keys['Digit1']) this.tryCast(0);
+        if (keys['Digit2']) this.tryCast(1);
+        if (keys['Digit3']) this.tryCast(2);
     }
     syncMesh() {
         const inBush = bushes.some(b => Math.hypot(this.x - b.x, this.y - b.y) < b.r);
@@ -2923,16 +3183,19 @@ class Player {
         this.mesh.userData.hpBar.quaternion.copy(camera.quaternion);
     }
     castSkill(slot, moveAngle, autoAngle = moveAngle) {
-        // AI hồi chiêu lâu hơn · người chơi nhanh hơn một chút
-        const cdMul = this.isAI ? 1.45 : 0.9;
+        const rank = Math.max(1, this.skillRanks[slot] || 1);
+        const cost = this.hero.skills[slot].cost || 0;
+        if (cost > 0) this.resource = Math.max(0, this.resource - cost);
+
+        // CD giảm nhẹ khi nâng cấp chiêu
+        const cdMul = (this.isAI ? 1.0 : 0.9) * (1 - (rank - 1) * 0.04);
         this.cds[slot] = this.hero.skills[slot].cd * cdMul;
-        const lvlScale = (1 + (this.level - 1) * 0.12) * (this.dmgMul || 1);
+
+        // Sức mạnh = cấp tướng + cấp chiêu
+        const rankScale = 1 + (rank - 1) * 0.22;
+        const lvlScale = (1 + (this.level - 1) * 0.08) * (this.dmgMul || 1) * rankScale;
         const id = this.hero.id;
-        // AI hay bắn lệch
-        if (this.isAI && slot > 0) {
-            autoAngle += (Math.random() - 0.5) * 0.45;
-            moveAngle += (Math.random() - 0.5) * 0.35;
-        }
+
         if (slot === 0) {
             const spd = id === 'aegis' ? 8 : 11;
             const life = id === 'aegis' ? 0.22 : 0.65;
@@ -2943,27 +3206,31 @@ class Player {
                 vx: Math.cos(autoAngle) * spd, vy: Math.sin(autoAngle) * spd,
                 radius: id === 'aegis' ? 14 : 6, dmg, color: this.hero.color, life, aoe: 0
             });
+            if (this.resourceType === 'fury') this.resource = Math.min(this.maxResource, this.resource + 4);
         } else if (slot === 1) {
             if (id === 'ignis') {
                 spawnProjectile({
                     team: this.team, owner: this, x: this.x, y: this.y,
                     vx: Math.cos(autoAngle) * 8.5, vy: Math.sin(autoAngle) * 8.5,
-                    radius: 13, dmg: 155 * lvlScale, color: '#ff9f1c', life: 0.85, aoe: 85
+                    radius: 12 + rank, dmg: 155 * lvlScale, color: '#ff9f1c', life: 0.85, aoe: 75 + rank * 8
                 });
             } else if (id === 'volt') {
+                const dash = 130 + rank * 12;
                 spawnParticles(this.x, this.y, 18, '#00f5d4', 5, 5, 0.4);
-                this.x += Math.cos(moveAngle) * 145;
-                this.y += Math.sin(moveAngle) * 145;
+                this.x += Math.cos(moveAngle) * dash;
+                this.y += Math.sin(moveAngle) * dash;
                 this.x = Math.max(40, Math.min(MAP_W - 40, this.x));
                 this.y = Math.max(70, Math.min(MAP_H - 70, this.y));
                 spawnParticles(this.x, this.y, 22, '#00f5d4', 6, 5, 0.4);
-                dealAreaDamage(this.team, this, this.x, this.y, 90, 125 * lvlScale);
+                dealAreaDamage(this.team, this, this.x, this.y, 80 + rank * 6, 125 * lvlScale);
             } else if (id === 'aegis') {
-                this.shield = 280 * lvlScale; this.shieldTimer = 3.5;
+                this.shield = 280 * lvlScale; this.shieldTimer = 3.2 + rank * 0.25;
                 addFloatingText(this.x, this.y, '+KHIÊN CHẮN', '#f7b801', 16);
                 spawnParticles(this.x, this.y, 20, '#f7b801', 4, 5, 0.5);
             } else if (id === 'sylph') {
-                for (let i = -2; i <= 2; i++) {
+                const arrows = 3 + Math.min(2, Math.floor(rank / 2));
+                const half = Math.floor(arrows / 2);
+                for (let i = -half; i <= half; i++) {
                     const a = autoAngle + i * 0.14;
                     spawnProjectile({
                         team: this.team, owner: this, x: this.x, y: this.y,
@@ -2980,11 +3247,12 @@ class Player {
                 spawnProjectile({
                     team: this.team, owner: this, x: this.x, y: this.y,
                     vx: Math.cos(autoAngle) * 6.5, vy: Math.sin(autoAngle) * 6.5,
-                    radius: 24, dmg: 310 * lvlScale, color: '#ff0055', life: 1.1, aoe: 140
+                    radius: 22 + rank * 3, dmg: 310 * lvlScale, color: '#ff0055', life: 1.1, aoe: 120 + rank * 15
                 });
             } else if (id === 'volt') {
-                for (let i = 0; i < 4; i++) {
-                    const a = (i * Math.PI * 2) / 12;
+                const bolts = 4 + rank;
+                for (let i = 0; i < bolts; i++) {
+                    const a = (i * Math.PI * 2) / bolts;
                     spawnProjectile({
                         team: this.team, owner: this, x: this.x, y: this.y,
                         vx: Math.cos(a) * 9, vy: Math.sin(a) * 9,
@@ -2993,12 +3261,12 @@ class Player {
                 }
             } else if (id === 'aegis') {
                 spawnParticles(this.x, this.y, 45, '#f7b801', 9, 7, 0.7);
-                dealAreaDamage(this.team, this, this.x, this.y, 165, 240 * lvlScale, 1.5);
+                dealAreaDamage(this.team, this, this.x, this.y, 150 + rank * 12, 240 * lvlScale, 1.2 + rank * 0.2);
             } else if (id === 'sylph') {
                 spawnProjectile({
                     team: this.team, owner: this, x: this.x, y: this.y,
                     vx: Math.cos(autoAngle) * 17, vy: Math.sin(autoAngle) * 17,
-                    radius: 15, dmg: 290 * lvlScale, color: '#7209b7', life: 0.9, aoe: 70
+                    radius: 14 + rank, dmg: 290 * lvlScale, color: '#7209b7', life: 0.9, aoe: 60 + rank * 10
                 });
             }
         }
@@ -3133,17 +3401,33 @@ function bindGameInput() {
 
     window.addEventListener('keydown', e => {
         if (gameState !== 'PLAYING') return;
-        if (['KeyQ','KeyW','KeyE','KeyA','Space'].includes(e.code)) e.preventDefault();
+        if (['KeyQ','KeyE','KeyF','KeyW','KeyA','KeyS','KeyD','Space'].includes(e.code)) e.preventDefault();
         if (e.repeat) return;
-        if (e.code === 'KeyA') skillQueue.push({ aa: true });
+        const lp = getLocalPlayer();
+        // Ctrl + F/Q/E = nâng cấp chiêu
+        if (e.ctrlKey && lp) {
+            if (e.code === 'KeyF') { lp.upgradeSkill(0); return; }
+            if (e.code === 'KeyQ') { lp.upgradeSkill(1); return; }
+            if (e.code === 'KeyE') { lp.upgradeSkill(2); return; }
+        }
+        if (e.code === 'KeyF') skillQueue.push({ aa: true });
         if (e.code === 'KeyQ') skillQueue.push({ slot: 1 });
         if (e.code === 'KeyE') skillQueue.push({ slot: 2 });
-        // W dự phòng = chiêu Q (slot 1) cho người quen tay LMHT
-        if (e.code === 'KeyW') skillQueue.push({ slot: 1 });
         if (e.code === 'Space') {
-            const lp = getLocalPlayer();
             if (lp) { camLook.set(wx(lp.x), 0.6, wz(lp.y)); }
         }
+    });
+
+    // Click ô chiêu để nâng cấp khi còn điểm
+    document.querySelectorAll('.skill-box[data-upgrade]').forEach(box => {
+        box.addEventListener('click', () => {
+            if (gameState !== 'PLAYING') return;
+            const slot = Number(box.dataset.upgrade);
+            const team = Number(box.dataset.team);
+            const p = players.find(pl => pl.team === team);
+            if (!p || (!p.isLocal && !p.isHotseat)) return;
+            if (p.skillPoints > 0) p.upgradeSkill(slot);
+        });
     });
 
     // Mobile skill buttons
@@ -3226,6 +3510,10 @@ function initMatch() {
         localTeam = 2;
     }
     players = [p1, p2];
+    // Gán cờ xong mới auto nâng cấp cho AI / hotseat
+    players.forEach(p => {
+        if (p.isAI || p.isHotseat) p.autoUpgradeSkills();
+    });
 
     const nexusDist = gameMode === 'SOLO' ? 720 : 560;
     const outerDist = gameMode === 'SOLO' ? 1400 : 1050;
@@ -3474,27 +3762,75 @@ function updateHUD() {
     updatePlayerHUD('p1', p1);
     updatePlayerHUD('p2', p2);
 }
+function rankPipsHtml(rank, maxRank) {
+    let html = '';
+    for (let i = 0; i < maxRank; i++) html += `<span class="pip${i < rank ? ' on' : ''}"></span>`;
+    return html || '—';
+}
 function updatePlayerHUD(prefix, p) {
     document.getElementById(`${prefix}-hud-lvl`).innerText = `CẤP ${p.level}`;
-    document.getElementById(`${prefix}-hp-bar`).style.width = `${(p.hp / p.maxHp) * 100}%`;
+    document.getElementById(`${prefix}-hp-bar`).style.width = `${Math.max(0, (p.hp / p.maxHp) * 100)}%`;
     document.getElementById(`${prefix}-hp-text`).innerText = p.dead
-        ? `HỒI SINH SAU: ${p.respawnTimer.toFixed(1)}s`
+        ? `HỒI SINH: ${Math.max(0, p.respawnTimer).toFixed(1)}s`
         : `${Math.ceil(p.hp)} / ${p.maxHp}`;
+
+    const resBar = document.getElementById(`${prefix}-res-bar`);
+    const resText = document.getElementById(`${prefix}-res-text`);
+    if (resBar) {
+        resBar.style.width = `${Math.max(0, (p.resource / p.maxResource) * 100)}%`;
+        resBar.style.background = `linear-gradient(90deg, ${p.resourceColor}, ${p.resourceColor2})`;
+    }
+    if (resText) resText.innerText = `${p.resourceName} ${Math.floor(p.resource)} / ${p.maxResource}`;
+
+    const xpBar = document.getElementById(`${prefix}-xp-bar`);
+    if (xpBar) xpBar.style.width = p.level >= 10 ? '100%' : `${(p.xp / p.xpToLevel) * 100}%`;
+
+    const ptsEl = document.getElementById(`${prefix}-skill-points`);
+    if (ptsEl) {
+        ptsEl.innerText = p.skillPoints > 0
+            ? `✦ ${p.skillPoints} điểm nâng cấp — bấm ô chiêu hoặc Ctrl+F/Q/E`
+            : '';
+    }
+
     for (let i = 0; i < 3; i++) {
         const cdEl = document.getElementById(`${prefix}-cd${i + 1}`);
-        if (p.cds[i] > 0) { cdEl.style.opacity = '1'; cdEl.innerText = p.cds[i].toFixed(1) + 's'; }
-        else cdEl.style.opacity = '0';
+        const rankEl = document.getElementById(`${prefix}-s${i + 1}-rank`);
+        const box = cdEl && cdEl.closest('.skill-box');
+        if (rankEl) rankEl.innerHTML = rankPipsHtml(p.skillRanks[i], p.maxSkillRanks[i]);
+        if (box) {
+            box.classList.toggle('locked', p.skillRanks[i] < 1);
+            box.classList.toggle('can-upgrade', p.canUpgradeSkill(i) && (p.isLocal || p.isHotseat));
+        }
+        if (cdEl) {
+            if (p.skillRanks[i] < 1) {
+                cdEl.style.opacity = '1';
+                cdEl.innerText = i === 2 && p.level < 6 ? 'Lv6' : 'LOCK';
+            } else if (p.cds[i] > 0) {
+                cdEl.style.opacity = '1';
+                cdEl.innerText = p.cds[i].toFixed(1) + 's';
+            } else cdEl.style.opacity = '0';
+        }
     }
     if (p.isLocal) {
-        const setMob = (id, cd) => {
+        const setMob = (id, cd, locked) => {
             const el = document.getElementById(id);
             if (!el) return;
-            if (cd > 0) { el.style.opacity = '1'; el.textContent = cd.toFixed(1); }
+            if (locked) { el.style.opacity = '1'; el.textContent = '—'; }
+            else if (cd > 0) { el.style.opacity = '1'; el.textContent = cd.toFixed(1); }
             else { el.style.opacity = '0'; el.textContent = ''; }
         };
-        setMob('mob-cd-aa', p.cds[0]);
-        setMob('mob-cd-1', p.cds[1]);
-        setMob('mob-cd-2', p.cds[2]);
+        setMob('mob-cd-aa', p.cds[0], p.skillRanks[0] < 1);
+        setMob('mob-cd-1', p.cds[1], p.skillRanks[1] < 1);
+        setMob('mob-cd-2', p.cds[2], p.skillRanks[2] < 1);
+
+        const ov = document.getElementById('respawn-overlay');
+        const num = document.getElementById('respawn-num');
+        if (ov && num) {
+            if (p.dead) {
+                ov.classList.add('show');
+                num.textContent = Math.max(0, p.respawnTimer).toFixed(1);
+            } else ov.classList.remove('show');
+        }
     }
 }
 
