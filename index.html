@@ -2422,11 +2422,29 @@ let keys = {};
 let matchTime = 0;
 let lastWaveTime = -10;
 
+function clearKeys() {
+    keys = {};
+}
+function isKeyDown(code) {
+    return !!keys[code];
+}
+
 window.addEventListener('keydown', e => {
+    // Bỏ qua khi đang gõ trong ô input
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable)) return;
     keys[e.code] = true;
     if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
 });
-window.addEventListener('keyup', e => { keys[e.code] = false; });
+window.addEventListener('keyup', e => {
+    keys[e.code] = false;
+    // Modifier + phím thường hay làm keyup bị mất → xóa WASD/F/Q/E khi nhả Ctrl/Alt/Meta
+    if (e.key === 'Control' || e.key === 'Alt' || e.key === 'Meta' || e.code.startsWith('Control') || e.code.startsWith('Alt') || e.code.startsWith('Meta')) {
+        ['KeyW','KeyA','KeyS','KeyD','KeyF','KeyQ','KeyE'].forEach(k => { keys[k] = false; });
+    }
+});
+window.addEventListener('blur', clearKeys);
+document.addEventListener('visibilitychange', () => { if (document.hidden) clearKeys(); });
+window.addEventListener('focus', clearKeys);
 
 let players = [];
 let towers = [];
@@ -3064,10 +3082,10 @@ class Player {
         // WASD di chuyển
         if (!usedMove) {
             let dx = 0, dy = 0;
-            if (keys['KeyW']) dy -= 1;
-            if (keys['KeyS']) dy += 1;
-            if (keys['KeyA']) dx -= 1;
-            if (keys['KeyD']) dx += 1;
+            if (isKeyDown('KeyW')) dy -= 1;
+            if (isKeyDown('KeyS')) dy += 1;
+            if (isKeyDown('KeyA')) dx -= 1;
+            if (isKeyDown('KeyD')) dx += 1;
             if (dx || dy) {
                 const len = Math.hypot(dx, dy);
                 this.moveTarget = null;
@@ -3105,7 +3123,7 @@ class Player {
         }
 
         // Chỉ đánh thường khi giữ F (không tự đánh)
-        if (keys['KeyF'] && this.cds[0] <= 0) this.tryCast(0);
+        if (isKeyDown('KeyF') && this.cds[0] <= 0) this.tryCast(0);
     }
     update(dt) {
         if (this.dead) {
@@ -3148,10 +3166,10 @@ class Player {
     }
     updateHotseat(dt) {
         let dx = 0, dy = 0;
-        if (keys['ArrowUp']) dy -= 1;
-        if (keys['ArrowDown']) dy += 1;
-        if (keys['ArrowLeft']) dx -= 1;
-        if (keys['ArrowRight']) dx += 1;
+        if (isKeyDown('ArrowUp')) dy -= 1;
+        if (isKeyDown('ArrowDown')) dy += 1;
+        if (isKeyDown('ArrowLeft')) dx -= 1;
+        if (isKeyDown('ArrowRight')) dx += 1;
         if (dx || dy) {
             const len = Math.hypot(dx, dy);
             this.x += (dx / len) * this.speed * (dt * 60);
@@ -3164,9 +3182,9 @@ class Player {
             ang = Math.atan2(enemy.y - this.y, enemy.x - this.x);
         }
         this.aimAngle = ang;
-        if (keys['Digit1']) this.tryCast(0);
-        if (keys['Digit2']) this.tryCast(1);
-        if (keys['Digit3']) this.tryCast(2);
+        if (isKeyDown('Digit1')) this.tryCast(0);
+        if (isKeyDown('Digit2')) this.tryCast(1);
+        if (isKeyDown('Digit3')) this.tryCast(2);
     }
     syncMesh() {
         const inBush = bushes.some(b => Math.hypot(this.x - b.x, this.y - b.y) < b.r);
@@ -3401,11 +3419,13 @@ function bindGameInput() {
 
     window.addEventListener('keydown', e => {
         if (gameState !== 'PLAYING') return;
-        if (['KeyQ','KeyE','KeyF','KeyW','KeyA','KeyS','KeyD','Space'].includes(e.code)) e.preventDefault();
+        if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+        if (['KeyQ','KeyE','KeyF','Space'].includes(e.code)) e.preventDefault();
         if (e.repeat) return;
         const lp = getLocalPlayer();
-        // Ctrl + F/Q/E = nâng cấp chiêu
+        // Ctrl + F/Q/E = nâng cấp chiêu (không giữ phím F/Q/E trong keys)
         if (e.ctrlKey && lp) {
+            keys['KeyF'] = keys['KeyQ'] = keys['KeyE'] = false;
             if (e.code === 'KeyF') { lp.upgradeSkill(0); return; }
             if (e.code === 'KeyQ') { lp.upgradeSkill(1); return; }
             if (e.code === 'KeyE') { lp.upgradeSkill(2); return; }
@@ -3489,6 +3509,7 @@ function initMatch() {
     camYaw = 0.2;
     skillQueue = [];
     joystick.active = false;
+    clearKeys();
 
     const h1 = HEROES[p1Pick], h2 = HEROES[p2Pick];
     const vsAI = gameMode === 'AI';
