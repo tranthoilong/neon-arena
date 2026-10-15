@@ -567,6 +567,26 @@
             position: relative;
             z-index: 1;
         }
+        .draft-body.ffa-mode {
+            grid-template-columns: 1fr auto 1fr auto 1fr;
+            gap: 10px;
+        }
+        .draft-body.ffa-mode .player-panel { min-width: 0; }
+        .draft-body.ffa-mode .hero-grid { grid-template-columns: 1fr 1fr; }
+        .player-panel.p3 .panel-header h2 { color: var(--gold); }
+        .score-box.p3-score {
+            color: var(--gold);
+            border-color: rgba(245, 197, 24, 0.45);
+            display: none;
+        }
+        .ffa-scores .score-box.p3-score { display: inline-flex; }
+        .player-hud.p3-hud {
+            display: none;
+            left: 50%;
+            transform: translateX(-50%);
+            bottom: 18px;
+            border-top: 3px solid var(--gold);
+        }
 
         .draft-vs {
             display: flex;
@@ -1246,7 +1266,7 @@
         <div class="brand-block">
             <div class="tag">1v1 Arena · 3D</div>
             <h1>NEON ARENA</h1>
-            <p>Đấu máy vs AI · Solo mời bạn · Phá hủy Nexus để thắng.</p>
+            <p>Đấu máy · 1v1v1 · Solo · Phá hủy Nexus để thắng.</p>
         </div>
 
         <div class="lobby-actions">
@@ -1254,9 +1274,10 @@
             <div id="lobby-home" class="lobby-view active">
                 <div class="btn-row">
                     <button class="btn btn-primary" id="btn-mode-ai">Đấu máy</button>
+                    <button class="btn btn-primary" id="btn-mode-ffa" style="background:linear-gradient(135deg,#f5c518,#ff6b35);border:none;color:#1a1200">1v1v1</button>
                     <button class="btn btn-danger" id="btn-mode-solo">Solo (PvP)</button>
                 </div>
-                <p class="lobby-hint">Đấu máy: vs AI thông minh · Solo: mời bạn bằng mã phòng mới chơi được<br>Desktop: chuột · A/Q/E · Mobile: joystick + nút chiêu</p>
+                <p class="lobby-hint">Đấu máy · 1v1v1 (AI hoặc mời bạn) · Solo mời bạn<br>Desktop: WASD · F/Q/E · Mobile: joystick + nút chiêu</p>
             </div>
 
             <div id="lobby-solo-menu" class="lobby-view">
@@ -1271,10 +1292,23 @@
                 </div>
             </div>
 
+            <div id="lobby-ffa-menu" class="lobby-view">
+                <div class="panel-glass">
+                    <div class="panel-title">1v1v1 · TAM GIÁC</div>
+                    <div class="btn-row" style="margin-bottom:12px;flex-wrap:wrap">
+                        <button class="btn btn-primary" id="btn-ffa-ai">Đấu 2 AI</button>
+                        <button class="btn btn-primary" id="btn-ffa-create" style="background:linear-gradient(135deg,#f5c518,#ff6b35);border:none;color:#1a1200">Tạo phòng</button>
+                        <button class="btn btn-danger" id="btn-ffa-join">Vào phòng</button>
+                    </div>
+                    <p class="lobby-hint" style="margin-top:0">Mời tối đa 2 bạn (mã phòng). Slot trống = AI. Cùng máy: P2 ←↑↓→ · P3 IJKL.</p>
+                    <button class="btn btn-ghost btn-full" id="btn-back-ffa-menu">Quay lại</button>
+                </div>
+            </div>
+
             <!-- Create room -->
             <div id="lobby-create" class="lobby-view">
                 <div class="panel-glass">
-                    <div class="panel-title">PHÒNG SOLO</div>
+                    <div class="panel-title" id="create-room-title">PHÒNG SOLO</div>
                     <div class="room-code-display">
                         <div class="label">Mã mời bạn bè</div>
                         <div class="code" id="created-room-code">------</div>
@@ -1291,7 +1325,7 @@
             <!-- Join room -->
             <div id="lobby-join" class="lobby-view">
                 <div class="panel-glass">
-                    <div class="panel-title">NHẬP MÃ PHÒNG</div>
+                    <div class="panel-title" id="join-room-title">NHẬP MÃ PHÒNG</div>
                     <div class="input-wrap">
                         <input class="code-input" id="join-code-input" maxlength="6" placeholder="ABC123" autocomplete="off" spellcheck="false">
                     </div>
@@ -1313,19 +1347,19 @@
         </div>
         <p class="draft-sub" id="draft-sub">Chọn tướng · Đấu trường 3D — phá hủy Nexus để chiến thắng</p>
 
-        <div class="draft-body">
+        <div class="draft-body" id="draft-body">
             <div class="player-panel p1">
                 <div class="pick-showcase" id="p1-showcase" style="--accent:#00e8ff"></div>
                 <div class="panel-header">
                     <h2>ĐỘI XANH · CHỌN TƯỚNG</h2>
-                    <span class="controls-hint">Bạn<br><b>Chuột · A Q E</b></span>
+                    <span class="controls-hint">Bạn<br><b>WASD · F Q E</b></span>
                 </div>
                 <div class="hero-grid" id="p1-grid"></div>
             </div>
 
-            <div class="draft-vs">
+            <div class="draft-vs" id="draft-vs-12">
                 <div class="draft-vs-line"></div>
-                <div class="draft-vs-ring">VS</div>
+                <div class="draft-vs-ring" id="draft-vs-label">VS</div>
                 <div class="draft-vs-line"></div>
             </div>
 
@@ -1337,6 +1371,21 @@
                 </div>
                 <div class="hero-grid" id="p2-grid"></div>
             </div>
+
+            <div class="draft-vs" id="draft-vs-23" style="display:none">
+                <div class="draft-vs-line"></div>
+                <div class="draft-vs-ring">VS</div>
+                <div class="draft-vs-line"></div>
+            </div>
+
+            <div class="player-panel p3" id="p3-draft-panel" style="display:none">
+                <div class="pick-showcase" id="p3-showcase" style="--accent:#f5c518"></div>
+                <div class="panel-header">
+                    <h2>ĐỘI VÀNG · CHỌN TƯỚNG</h2>
+                    <span class="controls-hint">AI 2<br><b>Đội vàng</b></span>
+                </div>
+                <div class="hero-grid" id="p3-grid"></div>
+            </div>
         </div>
 
         <div class="draft-footer">
@@ -1346,10 +1395,11 @@
 
     <!-- HUD -->
     <div id="hud">
-        <div class="top-bar">
+        <div class="top-bar" id="top-bar">
             <span class="score-box p1-score" id="p1-kills">0</span>
             <span class="match-timer" id="timer">00:00</span>
             <span class="score-box p2-score" id="p2-kills">0</span>
+            <span class="score-box p3-score" id="p3-kills">0</span>
         </div>
         <div class="control-hint-bar" id="control-hint-bar">WASD di chuyển · F/Q/E chiêu · Ctrl+F/Q/E nâng cấp · Space camera</div>
 
@@ -1488,20 +1538,72 @@ function generateRoomCode() {
     for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
     return code;
 }
-let gameMode = 'AI'; // 'AI' | 'SOLO'
+let gameMode = 'AI'; // 'AI' | 'SOLO' | 'FFA'
 let isRoomHost = true;
 let soloGuestReady = false;
+let pendingRoomMode = 'SOLO'; // chế độ khi tạo/vào phòng
+let ffaRoomSeats = { guest1: false, guest2: false }; // host theo dõi slot
+
+const TEAM_STYLE = {
+    1: { hex: '#00e8ff', three: 0x00e8ff, soft: '#38bdf8', soft3: 0x38bdf8, name: 'Xanh', label: 'Đội xanh' },
+    2: { hex: '#ff2d55', three: 0xff2d55, soft: '#fb7185', soft3: 0xfb7185, name: 'Đỏ', label: 'Đội đỏ' },
+    3: { hex: '#f5c518', three: 0xf5c518, soft: '#fbbf24', soft3: 0xfbbf24, name: 'Vàng', label: 'Đội vàng' }
+};
+function teamHex(team) { return (TEAM_STYLE[team] || TEAM_STYLE[1]).hex; }
+function teamThree(team) { return (TEAM_STYLE[team] || TEAM_STYLE[1]).three; }
+function teamSoft(team) { return (TEAM_STYLE[team] || TEAM_STYLE[1]).soft; }
+function teamSoft3(team) { return (TEAM_STYLE[team] || TEAM_STYLE[1]).soft3; }
+function teamName(team) { return (TEAM_STYLE[team] || TEAM_STYLE[1]).name; }
+
+function getTeamBase(team) {
+    if (gameMode === 'FFA') {
+        const m = 340;
+        if (team === 1) return { x: m, y: MAP_H - m };
+        if (team === 2) return { x: MAP_W - m, y: MAP_H - m };
+        return { x: MAP_CX, y: m };
+    }
+    if (team === 1) return { x: 260, y: MAP_CY };
+    return { x: MAP_W - 260, y: MAP_CY };
+}
+function pointToward(x, y, tx, ty, dist) {
+    const a = Math.atan2(ty - y, tx - x);
+    return { x: x + Math.cos(a) * dist, y: y + Math.sin(a) * dist };
+}
 
 function goToDraft(code) {
     currentRoomCode = code;
     if (roomPollTimer) { clearInterval(roomPollTimer); roomPollTimer = null; }
+    const draftBody = document.getElementById('draft-body');
+    const p3Panel = document.getElementById('p3-draft-panel');
+    const vs23 = document.getElementById('draft-vs-23');
+    const vsLabel = document.getElementById('draft-vs-label');
+    const isFfa = gameMode === 'FFA';
+    if (draftBody) draftBody.classList.toggle('ffa-mode', isFfa);
+    if (p3Panel) p3Panel.style.display = isFfa ? '' : 'none';
+    if (vs23) vs23.style.display = isFfa ? '' : 'none';
+    if (vsLabel) vsLabel.textContent = isFfa ? '1v1v1' : 'VS';
+
     document.getElementById('draft-room-code').textContent =
-        gameMode === 'AI' ? 'VS AI' : code;
+        gameMode === 'AI' ? 'VS AI' : (code && code !== 'FFA' && code !== 'AI' ? code : (gameMode === 'FFA' ? '1v1v1' : code));
     const sub = document.getElementById('draft-sub');
     const hint = document.getElementById('p2-draft-hint');
+    const hint3 = document.querySelector('#p3-draft-panel .controls-hint');
     if (gameMode === 'AI') {
         sub.textContent = 'Chế độ Đấu máy · Map tiêu chuẩn · Phá hủy Nexus AI';
         if (hint) hint.innerHTML = 'Máy (AI)<br><b>Đội đỏ thông minh</b>';
+    } else if (gameMode === 'FFA') {
+        const room = currentRoomCode && getRooms()[currentRoomCode];
+        const g1 = !!(room && room.guestJoined) || ffaRoomSeats.guest1;
+        const g2 = !!(room && room.guest2Joined) || ffaRoomSeats.guest2;
+        sub.textContent = isRoomHost
+            ? `1v1v1 phòng ${code || ''} · Slot trống = AI · P2 ←↑↓→ · P3 IJKL`
+            : `1v1v1 · Bạn là đội ${localTeam === 2 ? 'đỏ' : 'vàng'} · Phá Nexus cuối cùng thắng`;
+        if (hint) hint.innerHTML = (isRoomHost && g1) || localTeam === 2
+            ? 'Người chơi<br><b>←↑↓→ · 1 2 3</b>'
+            : 'AI / Bạn<br><b>Đội đỏ</b>';
+        if (hint3) hint3.innerHTML = (isRoomHost && g2) || localTeam === 3
+            ? 'Người chơi<br><b>IJKL · 7 8 9</b>'
+            : 'AI / Bạn<br><b>Đội vàng</b>';
     } else {
         sub.textContent = 'Chế độ Solo · Map rộng · P1 chuột · P2 phím mũi tên + 123';
         if (hint) hint.innerHTML = 'P2 hotseat<br><b>←↑↓→ · 1 2 3</b>';
@@ -1518,33 +1620,79 @@ document.getElementById('btn-mode-ai').addEventListener('click', () => {
     goToDraft('AI');
 });
 
+document.getElementById('btn-mode-ffa').addEventListener('click', () => {
+    gameMode = 'FFA';
+    pendingRoomMode = 'FFA';
+    showLobbyView('lobby-ffa-menu');
+});
+document.getElementById('btn-ffa-ai').addEventListener('click', () => {
+    gameMode = 'FFA';
+    localTeam = 1;
+    isRoomHost = true;
+    currentRoomCode = null;
+    ffaRoomSeats = { guest1: false, guest2: false };
+    goToDraft('FFA');
+});
+document.getElementById('btn-ffa-create').addEventListener('click', () => startCreateRoom('FFA'));
+document.getElementById('btn-ffa-join').addEventListener('click', () => openJoinRoom('FFA'));
+document.getElementById('btn-back-ffa-menu').addEventListener('click', () => showLobbyView('lobby-home'));
+
 document.getElementById('btn-mode-solo').addEventListener('click', () => {
     gameMode = 'SOLO';
+    pendingRoomMode = 'SOLO';
     showLobbyView('lobby-solo-menu');
 });
 document.getElementById('btn-back-solo-menu').addEventListener('click', () => showLobbyView('lobby-home'));
 
-document.getElementById('btn-create-room').addEventListener('click', () => {
-    gameMode = 'SOLO';
+function startCreateRoom(mode) {
+    pendingRoomMode = mode;
+    gameMode = mode;
     isRoomHost = true;
     soloGuestReady = false;
+    ffaRoomSeats = { guest1: false, guest2: false };
     let rooms = pruneOldRooms(getRooms());
     let code = generateRoomCode();
     while (rooms[code]) code = generateRoomCode();
-    rooms[code] = { created: Date.now(), hostReady: true, guestJoined: false, mode: 'SOLO' };
+    rooms[code] = {
+        created: Date.now(),
+        hostReady: true,
+        guestJoined: false,
+        guest2Joined: false,
+        mode
+    };
     saveRooms(rooms);
     currentRoomCode = code;
+    document.getElementById('create-room-title').textContent = mode === 'FFA' ? 'PHÒNG 1v1v1' : 'PHÒNG SOLO';
     document.getElementById('created-room-code').textContent = code;
-    document.getElementById('host-status').innerHTML = '<span class="dot"></span>Đang chờ người chơi khác nhập mã…';
+    document.getElementById('host-status').innerHTML = mode === 'FFA'
+        ? '<span class="dot"></span>Phòng 1/3 · Chờ bạn bè nhập mã… (có thể bắt đầu với AI)'
+        : '<span class="dot"></span>Đang chờ người chơi khác nhập mã…';
     document.getElementById('host-status').classList.remove('ready');
     const enterBtn = document.getElementById('btn-enter-draft-host');
-    enterBtn.disabled = true;
-    enterBtn.textContent = 'Chờ đối thủ…';
+    if (mode === 'FFA') {
+        enterBtn.disabled = false;
+        enterBtn.textContent = 'Bắt đầu (slot trống = AI)';
+    } else {
+        enterBtn.disabled = true;
+        enterBtn.textContent = 'Chờ đối thủ…';
+    }
     showLobbyView('lobby-create');
     if (roomPollTimer) clearInterval(roomPollTimer);
     roomPollTimer = setInterval(() => {
         const r = getRooms()[code];
-        if (r && r.guestJoined) {
+        if (!r) return;
+        if (mode === 'FFA') {
+            ffaRoomSeats.guest1 = !!r.guestJoined;
+            ffaRoomSeats.guest2 = !!r.guest2Joined;
+            const n = 1 + (r.guestJoined ? 1 : 0) + (r.guest2Joined ? 1 : 0);
+            const st = document.getElementById('host-status');
+            st.innerHTML = `<span class="dot"></span>Người trong phòng: ${n}/3` +
+                (r.guestJoined ? ' · Đỏ đã vào' : '') +
+                (r.guest2Joined ? ' · Vàng đã vào' : '');
+            if (n >= 2) st.classList.add('ready');
+            enterBtn.disabled = false;
+            enterBtn.textContent = n >= 3 ? 'Đủ 3 người · Vào chọn tướng' : 'Vào chọn tướng (trống = AI)';
+        } else if (r.guestJoined) {
             soloGuestReady = true;
             document.getElementById('host-status').innerHTML = 'Đối thủ đã vào! Có thể bắt đầu.';
             document.getElementById('host-status').classList.add('ready');
@@ -1552,7 +1700,21 @@ document.getElementById('btn-create-room').addEventListener('click', () => {
             enterBtn.textContent = 'Vào chọn tướng';
         }
     }, 400);
-});
+}
+
+function openJoinRoom(mode) {
+    pendingRoomMode = mode;
+    gameMode = mode;
+    document.getElementById('join-room-title').textContent = mode === 'FFA' ? 'VÀO PHÒNG 1v1v1' : 'NHẬP MÃ PHÒNG';
+    document.getElementById('join-error').textContent = '';
+    document.getElementById('join-code-input').value = '';
+    showLobbyView('lobby-join');
+    setTimeout(() => document.getElementById('join-code-input').focus(), 50);
+}
+
+document.getElementById('btn-create-room').addEventListener('click', () => startCreateRoom('SOLO'));
+document.getElementById('btn-show-join').addEventListener('click', () => openJoinRoom('SOLO'));
+
 document.getElementById('btn-copy-code').addEventListener('click', async () => {
     const code = document.getElementById('created-room-code').textContent;
     try {
@@ -1569,16 +1731,14 @@ document.getElementById('btn-enter-draft-host').addEventListener('click', () => 
         if (!(r && r.guestJoined)) return;
         soloGuestReady = true;
     }
+    if (gameMode === 'FFA' && currentRoomCode) {
+        const r = getRooms()[currentRoomCode];
+        ffaRoomSeats.guest1 = !!(r && r.guestJoined);
+        ffaRoomSeats.guest2 = !!(r && r.guest2Joined);
+    }
     localTeam = 1;
     isRoomHost = true;
-    goToDraft(currentRoomCode || 'SOLO');
-});
-document.getElementById('btn-show-join').addEventListener('click', () => {
-    gameMode = 'SOLO';
-    document.getElementById('join-error').textContent = '';
-    document.getElementById('join-code-input').value = '';
-    showLobbyView('lobby-join');
-    setTimeout(() => document.getElementById('join-code-input').focus(), 50);
+    goToDraft(currentRoomCode || gameMode);
 });
 document.getElementById('btn-join-room').addEventListener('click', () => {
     const raw = document.getElementById('join-code-input').value.trim().toUpperCase();
@@ -1587,6 +1747,36 @@ document.getElementById('btn-join-room').addEventListener('click', () => {
     const rooms = getRooms();
     const room = rooms[raw];
     if (!room) { errorEl.textContent = 'Không tìm thấy phòng. Kiểm tra lại mã.'; return; }
+
+    const mode = room.mode || 'SOLO';
+    if (pendingRoomMode === 'FFA' && mode !== 'FFA') {
+        errorEl.textContent = 'Đây là phòng Solo, không phải 1v1v1.'; return;
+    }
+    if (pendingRoomMode === 'SOLO' && mode === 'FFA') {
+        errorEl.textContent = 'Đây là phòng 1v1v1 — vào từ menu 1v1v1.'; return;
+    }
+
+    if (mode === 'FFA') {
+        if (!room.guestJoined) {
+            room.guestJoined = true;
+            localTeam = 2;
+        } else if (!room.guest2Joined) {
+            room.guest2Joined = true;
+            localTeam = 3;
+        } else {
+            errorEl.textContent = 'Phòng đã đủ 3 người.'; return;
+        }
+        rooms[raw] = room;
+        saveRooms(rooms);
+        gameMode = 'FFA';
+        isRoomHost = false;
+        soloGuestReady = true;
+        ffaRoomSeats = { guest1: !!room.guestJoined, guest2: !!room.guest2Joined };
+        errorEl.textContent = '';
+        goToDraft(raw);
+        return;
+    }
+
     room.guestJoined = true;
     rooms[raw] = room;
     saveRooms(rooms);
@@ -1602,9 +1792,11 @@ document.getElementById('join-code-input').addEventListener('keydown', e => {
 });
 document.getElementById('btn-back-from-create').addEventListener('click', () => {
     if (roomPollTimer) clearInterval(roomPollTimer);
-    showLobbyView('lobby-solo-menu');
+    showLobbyView(pendingRoomMode === 'FFA' ? 'lobby-ffa-menu' : 'lobby-solo-menu');
 });
-document.getElementById('btn-back-from-join').addEventListener('click', () => showLobbyView('lobby-solo-menu'));
+document.getElementById('btn-back-from-join').addEventListener('click', () => {
+    showLobbyView(pendingRoomMode === 'FFA' ? 'lobby-ffa-menu' : 'lobby-solo-menu');
+});
 
 const HEROES = [
     { id:'ignis', name:'IGNIS', role:'Pháp Sư Hỏa Cầu', color:'#ff6b35', icon:'🔥', hp:1200, speed:3.9, radius:20,
@@ -1629,7 +1821,7 @@ const HEROES = [
       skills:[{name:'Tên Ánh Sáng',cd:0.26,cost:0},{name:'Loạt Tên Ngân Hà',cd:3.2,cost:50},{name:'Mũi Tên Phán Quyết',cd:8.0,cost:95}] }
 ];
 
-let p1Pick = 0, p2Pick = 1;
+let p1Pick = 0, p2Pick = 1, p3Pick = 2;
 
 function renderPickShowcase(el, hero, teamLabel, accent) {
     if (!el || !hero) return;
@@ -1650,13 +1842,21 @@ function renderPickShowcase(el, hero, teamLabel, accent) {
 function renderDraftUI() {
     const p1Grid = document.getElementById('p1-grid');
     const p2Grid = document.getElementById('p2-grid');
+    const p3Grid = document.getElementById('p3-grid');
     p1Grid.innerHTML = ''; p2Grid.innerHTML = '';
+    if (p3Grid) p3Grid.innerHTML = '';
     HEROES.forEach((h, idx) => {
         p1Grid.appendChild(createHeroCard(h, idx === p1Pick, () => { p1Pick = idx; renderDraftUI(); }));
         p2Grid.appendChild(createHeroCard(h, idx === p2Pick, () => { p2Pick = idx; renderDraftUI(); }));
+        if (p3Grid && gameMode === 'FFA') {
+            p3Grid.appendChild(createHeroCard(h, idx === p3Pick, () => { p3Pick = idx; renderDraftUI(); }));
+        }
     });
     renderPickShowcase(document.getElementById('p1-showcase'), HEROES[p1Pick], 'Đội xanh · Đã chọn', '#00e8ff');
     renderPickShowcase(document.getElementById('p2-showcase'), HEROES[p2Pick], 'Đội đỏ · Đã chọn', '#ff2d55');
+    if (gameMode === 'FFA') {
+        renderPickShowcase(document.getElementById('p3-showcase'), HEROES[p3Pick], 'Đội vàng · Đã chọn', '#f5c518');
+    }
 }
 function createHeroCard(hero, isSelected, onClick) {
     const div = document.createElement('div');
@@ -1713,6 +1913,8 @@ function rebuildBushes() {
 function configureMapForMode() {
     if (gameMode === 'SOLO') {
         MAP_W = 4800; MAP_H = 2600; SCALE = 0.032;
+    } else if (gameMode === 'FFA') {
+        MAP_W = 4000; MAP_H = 4000; SCALE = 0.030;
     } else {
         MAP_W = 3400; MAP_H = 1900; SCALE = 0.038;
     }
@@ -1984,7 +2186,7 @@ function buildArena() {
     moveMarker.visible = false;
     scene.add(moveMarker);
 
-    // Raised mid lane
+    // Đường lính
     const laneMat = new THREE.MeshStandardMaterial({
         map: makeLaneTexture(),
         metalness: 0.5,
@@ -1993,14 +2195,44 @@ function buildArena() {
         emissiveIntensity: 0.35
     });
     arenaPulseMats.push(laneMat);
-    const lane = new THREE.Mesh(
-        new THREE.BoxGeometry(MAP_W * SCALE * 0.98, 0.22, Math.max(280, MAP_H * 0.22) * SCALE),
-        laneMat
-    );
-    lane.position.set(0, 0.12, 0);
-    lane.receiveShadow = true;
-    lane.castShadow = false;
-    arenaGroup.add(lane);
+
+    if (gameMode === 'FFA') {
+        // 3 đường tam giác nối 3 căn cứ
+        getFfaLanePairs().forEach(([a, b]) => {
+            const ba = getTeamBase(a), bb = getTeamBase(b);
+            const dx = bb.x - ba.x, dy = bb.y - ba.y;
+            const len = Math.hypot(dx, dy);
+            const ang = Math.atan2(dy, dx);
+            const lane = new THREE.Mesh(
+                new THREE.BoxGeometry(len * SCALE, 0.2, 220 * SCALE),
+                laneMat.clone()
+            );
+            lane.position.set(wx((ba.x + bb.x) / 2), 0.12, wz((ba.y + bb.y) / 2));
+            lane.rotation.y = -ang;
+            lane.receiveShadow = true;
+            arenaGroup.add(lane);
+        });
+        // Vòng giữa
+        const midRing = new THREE.Mesh(
+            new THREE.RingGeometry(180 * SCALE, 220 * SCALE, 48),
+            new THREE.MeshStandardMaterial({
+                color: 0x0a2038, emissive: 0x00aacc, emissiveIntensity: 0.4,
+                metalness: 0.5, roughness: 0.4, side: THREE.DoubleSide
+            })
+        );
+        midRing.rotation.x = -Math.PI / 2;
+        midRing.position.y = 0.15;
+        arenaGroup.add(midRing);
+    } else {
+        const lane = new THREE.Mesh(
+            new THREE.BoxGeometry(MAP_W * SCALE * 0.98, 0.22, Math.max(280, MAP_H * 0.22) * SCALE),
+            laneMat
+        );
+        lane.position.set(0, 0.12, 0);
+        lane.receiveShadow = true;
+        lane.castShadow = false;
+        arenaGroup.add(lane);
+    }
 
     // River with glow panels
     const riverMat = new THREE.MeshStandardMaterial({
@@ -2064,8 +2296,14 @@ function buildArena() {
         arenaGroup.add(line);
     });
 
-    // Base platforms
-    [[220, 0x00e8ff], [MAP_W - 220, 0xff2d55]].forEach(([x, col]) => {
+    // Base platforms + đài phun
+    const bases = gameMode === 'FFA'
+        ? [1, 2, 3].map(t => ({ ...getTeamBase(t), col: teamThree(t) }))
+        : [
+            { x: 220, y: MAP_CY, col: 0x00e8ff },
+            { x: MAP_W - 220, y: MAP_CY, col: 0xff2d55 }
+        ];
+    bases.forEach(({ x, y, col }) => {
         const pad = new THREE.Mesh(
             new THREE.CylinderGeometry(5.5, 6.2, 0.35, 32),
             new THREE.MeshStandardMaterial({
@@ -2073,13 +2311,11 @@ function buildArena() {
                 emissive: col, emissiveIntensity: 0.2
             })
         );
-        pad.position.set(wx(x), 0.18, wz(MAP_CY));
+        pad.position.set(wx(x), 0.18, wz(y));
         pad.receiveShadow = true;
         arenaGroup.add(pad);
+        createFountain(x, y, col);
     });
-
-    createFountain(220, MAP_CY, 0x00e8ff);
-    createFountain(MAP_W - 220, MAP_CY, 0xff2d55);
     bushes.forEach(b => createBush(b));
 
     // Floating ambient orbs
@@ -2216,7 +2452,7 @@ function updateHealthBarSprite(sprite, hp, maxHp, color, shield = 0) {
 }
 
 function createTowerMesh(team) {
-    const color = team === 1 ? 0x00e8ff : 0xff2d55;
+    const color = teamThree(team);
     const g = new THREE.Group();
 
     const base = new THREE.Mesh(
@@ -2289,7 +2525,7 @@ function createTowerMesh(team) {
 }
 
 function createHeroMesh(hero, team) {
-    const teamColor = team === 1 ? 0x00e8ff : 0xff2d55;
+    const teamColor = teamThree(team);
     const heroColor = new THREE.Color(hero.color);
     const g = new THREE.Group();
 
@@ -2377,7 +2613,7 @@ function createHeroMesh(hero, team) {
 }
 
 function createMinionMesh(team) {
-    const color = team === 1 ? 0x38bdf8 : 0xfb7185;
+    const color = teamSoft3(team);
     const g = new THREE.Group();
     const body = new THREE.Mesh(
         new THREE.CapsuleGeometry ? new THREE.CapsuleGeometry(0.4, 0.35, 4, 10) : new THREE.SphereGeometry(0.5, 12, 12),
@@ -2520,7 +2756,7 @@ class Tower {
         this.hp = this.maxHp;
         this.range = isNexus ? 220 : 190;
         this.fireCd = 0;
-        this.color = team === 1 ? '#00e8ff' : '#ff2d55';
+        this.color = teamHex(team);
         this.rot = 0;
         this.mesh = createTowerMesh(team);
         this.mesh.position.set(wx(x), 0, wz(y));
@@ -2566,14 +2802,17 @@ function spawnProjectile(p) {
 }
 
 class Minion {
-    constructor(team, x, y) {
+    constructor(team, x, y, opts = {}) {
         this.team = team;
         this.x = x; this.y = y;
         this.radius = 12;
         this.maxHp = 200; this.hp = this.maxHp;
         this.speed = 1.45;
-        this.color = team === 1 ? '#38bdf8' : '#fb7185';
+        this.color = teamSoft(team);
         this.atkCd = 0;
+        // Điểm đích đường lính (căn cứ / trụ địch)
+        this.laneTx = opts.tx != null ? opts.tx : MAP_CX;
+        this.laneTy = opts.ty != null ? opts.ty : MAP_CY;
         this.mesh = createMinionMesh(team);
         this.mesh.position.set(wx(x), 0, wz(y));
         scene.add(this.mesh);
@@ -2605,9 +2844,9 @@ class Minion {
                 });
             }
         } else {
-            const dir = this.team === 1 ? 1 : -1;
-            this.x += dir * this.speed;
-            this.y += (MAP_CY - this.y) * 0.02;
+            const a = Math.atan2(this.laneTy - this.y, this.laneTx - this.x);
+            this.x += Math.cos(a) * this.speed;
+            this.y += Math.sin(a) * this.speed;
         }
         this.mesh.position.set(wx(this.x), 0, wz(this.y));
         if ((this._hpTick = (this._hpTick || 0) + 1) % 3 === 0) {
@@ -2616,6 +2855,28 @@ class Minion {
     }
     dispose() {
         scene.remove(this.mesh);
+    }
+}
+
+function getFfaLanePairs() {
+    return [[1, 2], [2, 3], [3, 1]];
+}
+
+function spawnMinionWaveAlongLane(fromTeam, toTeam, count = 3) {
+    const from = getTeamBase(fromTeam);
+    const to = getTeamBase(toTeam);
+    const gate = pointToward(from.x, from.y, to.x, to.y, 200);
+    const ang = Math.atan2(to.y - from.y, to.x - from.x);
+    const side = ang + Math.PI / 2;
+    for (let i = 0; i < count; i++) {
+        const spread = (i - (count - 1) / 2) * 38;
+        const back = (i % 2) * 28;
+        minions.push(new Minion(
+            fromTeam,
+            gate.x + Math.cos(side) * spread - Math.cos(ang) * back,
+            gate.y + Math.sin(side) * spread - Math.sin(ang) * back,
+            { tx: to.x, ty: to.y }
+        ));
     }
 }
 
@@ -2645,12 +2906,12 @@ class Player {
         this.resourceColor2 = res.color2 || res.color;
         this.moveTarget = null;
         this.attackTarget = null;
-        this.aimAngle = team === 1 ? 0 : Math.PI;
-        this.level = 1; this.xp = 0; this.xpToLevel = 100; this.kills = 0;
+        this.aimAngle = Math.atan2(MAP_CY - y, MAP_CX - x);
+        this.level = 1; this.xp = 0; this.xpToLevel = 60; this.kills = 0;
         this.cds = [0, 0, 0];
-        this.skillRanks = [1, 0, 0]; // AA mở sẵn cấp 1
+        this.skillRanks = [1, 1, 0]; // F + Q mở sẵn · E từ cấp 6
         this.maxSkillRanks = [5, 5, 3];
-        this.skillPoints = 1; // điểm nâng cấp lúc đầu → mở Q
+        this.skillPoints = 0;
         this.shield = 0; this.shieldTimer = 0;
         this.stunTimer = 0;
         this.dead = false; this.respawnTimer = 0;
@@ -2689,19 +2950,21 @@ class Player {
         }
     }
     gainXp(amount) {
-        this.xp += this.isLocal ? amount * 1.35 : amount;
+        if (!amount || this.dead && this.respawnTimer > 9000) return;
+        this.xp += this.isLocal ? amount * 1.5 : amount;
         while (this.xp >= this.xpToLevel && this.level < 10) {
             this.xp -= this.xpToLevel;
             this.level++;
-            this.xpToLevel = Math.round(90 + this.level * 18);
+            this.xpToLevel = Math.round(55 + this.level * 12);
             this.skillPoints++;
             this.maxHp += this.isAI ? 80 : 120;
             this.maxResource = Math.round(this.maxResource + (this.resourceType === 'energy' || this.resourceType === 'fury' ? 0 : 12));
             this.hp = Math.min(this.maxHp, this.hp + (this.isAI ? 140 : 260));
             this.resource = Math.min(this.maxResource, this.resource + this.maxResource * 0.35);
             spawnParticles(this.x, this.y, 28, '#fbbf24', 6, 5, 0.7);
-            addFloatingText(this.x, this.y, `LÊN CẤP ${this.level}! +1 điểm chiêu`, '#fbbf24', 18);
-            if (this.isAI || this.isHotseat) this.autoUpgradeSkills();
+            addFloatingText(this.x, this.y, `LÊN CẤP ${this.level}!`, '#fbbf24', 18);
+            // Tự nâng chiêu khi lên cấp (mọi người chơi)
+            this.autoUpgradeSkills();
         }
     }
     takeDamage(dmg, attackerPlayer = null) {
@@ -2779,9 +3042,16 @@ class Player {
     }
     tryCast(slot) {
         if (this.dead || this.stunTimer > 0) return;
+        // Còn điểm + chiêu chưa mở / có thể nâng → ưu tiên nâng khi bấm phím chiêu
+        if (this.skillPoints > 0 && this.canUpgradeSkill(slot) && (this.skillRanks[slot] < 1 || this.isLocal)) {
+            // Local: nếu chiêu đang khóa thì nâng rồi mới đánh; AI chỉ nâng qua autoUpgrade
+            if (this.skillRanks[slot] < 1) {
+                this.upgradeSkill(slot);
+            }
+        }
         if (this.cds[slot] > 0) return;
         if ((this.skillRanks[slot] || 0) < 1) {
-            if (this.isLocal) addFloatingText(this.x, this.y, 'Chiêu chưa nâng cấp!', '#fbbf24', 13);
+            if (this.isLocal) addFloatingText(this.x, this.y, slot === 2 ? 'Chiêu cuối mở cấp 6' : 'Chiêu chưa mở!', '#fbbf24', 13);
             return;
         }
         const cost = (this.hero.skills[slot].cost || 0);
@@ -2847,7 +3117,13 @@ class Player {
     }
     updateAI(dt) {
         this.aiTimer -= dt;
-        const enemy = players.find(p => p.team !== this.team && !p.dead);
+        // Chọn tướng địch gần nhất (quan trọng ở 1v1v1)
+        let enemy = null, enemyBest = 1e9;
+        for (const p of players) {
+            if (p.team === this.team || p.dead) continue;
+            const d = Math.hypot(p.x - this.x, p.y - this.y);
+            if (d < enemyBest) { enemyBest = d; enemy = p; }
+        }
         const enemyTowers = towers.filter(t => t.team !== this.team);
         const enemyOuter = enemyTowers.filter(t => !t.isNexus).sort((a, b) =>
             Math.hypot(a.x - this.x, a.y - this.y) - Math.hypot(b.x - this.x, b.y - this.y)
@@ -3166,25 +3442,42 @@ class Player {
     }
     updateHotseat(dt) {
         let dx = 0, dy = 0;
-        if (isKeyDown('ArrowUp')) dy -= 1;
-        if (isKeyDown('ArrowDown')) dy += 1;
-        if (isKeyDown('ArrowLeft')) dx -= 1;
-        if (isKeyDown('ArrowRight')) dx += 1;
+        const scheme = this.hotseatScheme || 'arrows';
+        if (scheme === 'ijkl') {
+            if (isKeyDown('KeyI')) dy -= 1;
+            if (isKeyDown('KeyK')) dy += 1;
+            if (isKeyDown('KeyJ')) dx -= 1;
+            if (isKeyDown('KeyL')) dx += 1;
+        } else {
+            if (isKeyDown('ArrowUp')) dy -= 1;
+            if (isKeyDown('ArrowDown')) dy += 1;
+            if (isKeyDown('ArrowLeft')) dx -= 1;
+            if (isKeyDown('ArrowRight')) dx += 1;
+        }
         if (dx || dy) {
             const len = Math.hypot(dx, dy);
             this.x += (dx / len) * this.speed * (dt * 60);
             this.y += (dy / len) * this.speed * (dt * 60);
             this.aimAngle = Math.atan2(dy, dx);
         }
-        const enemy = players.find(p => p.team !== this.team && !p.dead);
-        let ang = this.aimAngle;
-        if (enemy && Math.hypot(enemy.x - this.x, enemy.y - this.y) < 480) {
-            ang = Math.atan2(enemy.y - this.y, enemy.x - this.x);
+        let enemy = null, best = 1e9;
+        for (const p of players) {
+            if (p.team === this.team || p.dead) continue;
+            const d = Math.hypot(p.x - this.x, p.y - this.y);
+            if (d < best) { best = d; enemy = p; }
         }
+        let ang = this.aimAngle;
+        if (enemy && best < 480) ang = Math.atan2(enemy.y - this.y, enemy.x - this.x);
         this.aimAngle = ang;
-        if (isKeyDown('Digit1')) this.tryCast(0);
-        if (isKeyDown('Digit2')) this.tryCast(1);
-        if (isKeyDown('Digit3')) this.tryCast(2);
+        if (scheme === 'ijkl') {
+            if (isKeyDown('Digit7')) this.tryCast(0);
+            if (isKeyDown('Digit8')) this.tryCast(1);
+            if (isKeyDown('Digit9')) this.tryCast(2);
+        } else {
+            if (isKeyDown('Digit1')) this.tryCast(0);
+            if (isKeyDown('Digit2')) this.tryCast(1);
+            if (isKeyDown('Digit3')) this.tryCast(2);
+        }
     }
     syncMesh() {
         const inBush = bushes.some(b => Math.hypot(this.x - b.x, this.y - b.y) < b.r);
@@ -3195,8 +3488,7 @@ class Player {
         this.mesh.userData.shieldRing.material.opacity = this.shield > 0 ? 0.9 : 0;
         if (this.shield > 0) this.mesh.userData.shieldRing.rotation.z += 0.05;
         if ((this._hpTick = (this._hpTick || 0) + 1) % 2 === 0) {
-            const teamColor = this.team === 1 ? '#00e8ff' : '#ff2d55';
-            updateHealthBarSprite(this.mesh.userData.hpBar, this.hp, this.maxHp, teamColor, this.shield);
+            updateHealthBarSprite(this.mesh.userData.hpBar, this.hp, this.maxHp, teamHex(this.team), this.shield);
         }
         this.mesh.userData.hpBar.quaternion.copy(camera.quaternion);
     }
@@ -3302,7 +3594,7 @@ function dealAreaDamage(team, ownerPlayer, x, y, radius, dmg, stunDuration = 0) 
     minions.forEach(m => {
         if (m.team !== team && Math.hypot(m.x - x, m.y - y) <= radius + m.radius) {
             m.hp -= dmg;
-            if (m.hp <= 0 && ownerPlayer) ownerPlayer.gainXp(25);
+            if (m.hp <= 0 && ownerPlayer) ownerPlayer.gainXp(40);
         }
     });
     towers.forEach(t => {
@@ -3423,12 +3715,20 @@ function bindGameInput() {
         if (['KeyQ','KeyE','KeyF','Space'].includes(e.code)) e.preventDefault();
         if (e.repeat) return;
         const lp = getLocalPlayer();
-        // Ctrl + F/Q/E = nâng cấp chiêu (không giữ phím F/Q/E trong keys)
-        if (e.ctrlKey && lp) {
+        // Ctrl / Shift + F/Q/E = nâng cấp chiêu thủ công
+        if ((e.ctrlKey || e.shiftKey) && lp) {
             keys['KeyF'] = keys['KeyQ'] = keys['KeyE'] = false;
             if (e.code === 'KeyF') { lp.upgradeSkill(0); return; }
             if (e.code === 'KeyQ') { lp.upgradeSkill(1); return; }
             if (e.code === 'KeyE') { lp.upgradeSkill(2); return; }
+        }
+        // Còn điểm nâng cấp: bấm F/Q/E lần đầu sẽ nâng chiêu đó rồi mới cast
+        if (lp && lp.skillPoints > 0) {
+            const slot = e.code === 'KeyF' ? 0 : e.code === 'KeyQ' ? 1 : e.code === 'KeyE' ? 2 : -1;
+            if (slot >= 0 && lp.canUpgradeSkill(slot)) {
+                lp.upgradeSkill(slot);
+                // vẫn cho cast ngay sau khi nâng (trừ khi chưa đủ điều kiện)
+            }
         }
         if (e.code === 'KeyF') skillQueue.push({ aa: true });
         if (e.code === 'KeyQ') skillQueue.push({ slot: 1 });
@@ -3505,48 +3805,93 @@ function initMatch() {
     gameState = 'PLAYING';
     matchTime = 0;
     lastWaveTime = -12;
-    camZoom = gameMode === 'SOLO' ? 1.05 : 0.92;
+    camZoom = gameMode === 'SOLO' ? 1.05 : gameMode === 'FFA' ? 1.12 : 0.92;
     camYaw = 0.2;
     skillQueue = [];
     joystick.active = false;
     clearKeys();
 
-    const h1 = HEROES[p1Pick], h2 = HEROES[p2Pick];
-    const vsAI = gameMode === 'AI';
-    const p1 = new Player(1, h1, 260, MAP_CY, { isLocal: false, isAI: false });
-    const p2 = new Player(2, h2, MAP_W - 260, MAP_CY, { isLocal: false, isAI: false });
+    const h1 = HEROES[p1Pick], h2 = HEROES[p2Pick], h3 = HEROES[p3Pick];
+    const b1 = getTeamBase(1), b2 = getTeamBase(2), b3 = getTeamBase(3);
 
-    if (vsAI) {
-        p1.isLocal = true; p1.isAI = false;
-        p2.isLocal = false; p2.isAI = true;
-        localTeam = 1;
-    } else if (isRoomHost) {
-        // Solo cùng máy: P1 chuột · P2 phím ←↑↓→ + 1/2/3
-        p1.isLocal = true; p1.isAI = false;
-        p2.isLocal = false; p2.isAI = false; p2.isHotseat = true;
-        localTeam = 1;
+    if (gameMode === 'FFA') {
+        const room = currentRoomCode ? getRooms()[currentRoomCode] : null;
+        const hasG1 = !!(room && room.guestJoined) || ffaRoomSeats.guest1;
+        const hasG2 = !!(room && room.guest2Joined) || ffaRoomSeats.guest2;
+
+        const p1 = new Player(1, h1, b1.x, b1.y, { isLocal: false, isAI: false });
+        const p2 = new Player(2, h2, b2.x, b2.y, { isLocal: false, isAI: false });
+        const p3 = new Player(3, h3, b3.x, b3.y, { isLocal: false, isAI: false });
+
+        if (isRoomHost) {
+            // Host cùng máy: P1 local · P2/P3 hotseat nếu đã vào phòng, không thì AI
+            localTeam = 1;
+            p1.isLocal = true; p1.isAI = false;
+            if (hasG1) { p2.isHotseat = true; p2.hotseatScheme = 'arrows'; p2.isAI = false; }
+            else { p2.isAI = true; }
+            if (hasG2) { p3.isHotseat = true; p3.hotseatScheme = 'ijkl'; p3.isAI = false; }
+            else { p3.isAI = true; }
+        } else if (localTeam === 2) {
+            p1.isAI = true;
+            p2.isLocal = true;
+            p3.isAI = true;
+        } else {
+            // guest đội vàng
+            localTeam = 3;
+            p1.isAI = true;
+            p2.isAI = true;
+            p3.isLocal = true;
+        }
+        players = [p1, p2, p3];
     } else {
-        p1.isLocal = false; p1.isAI = true;
-        p2.isLocal = true; p2.isAI = false;
-        localTeam = 2;
+        const p1 = new Player(1, h1, b1.x, b1.y, { isLocal: false, isAI: false });
+        const p2 = new Player(2, h2, b2.x, b2.y, { isLocal: false, isAI: false });
+        if (gameMode === 'AI') {
+            p1.isLocal = true; p1.isAI = false;
+            p2.isLocal = false; p2.isAI = true;
+            localTeam = 1;
+        } else if (isRoomHost) {
+            p1.isLocal = true; p1.isAI = false;
+            p2.isLocal = false; p2.isAI = false; p2.isHotseat = true;
+            localTeam = 1;
+        } else {
+            p1.isLocal = false; p1.isAI = true;
+            p2.isLocal = true; p2.isAI = false;
+            localTeam = 2;
+        }
+        players = [p1, p2];
     }
-    players = [p1, p2];
-    // Gán cờ xong mới auto nâng cấp cho AI / hotseat
     players.forEach(p => {
         if (p.isAI || p.isHotseat) p.autoUpgradeSkills();
     });
 
-    const nexusDist = gameMode === 'SOLO' ? 720 : 560;
-    const outerDist = gameMode === 'SOLO' ? 1400 : 1050;
-    towers = [
-        new Tower(1, nexusDist, MAP_CY, true),
-        new Tower(2, MAP_W - nexusDist, MAP_CY, true),
-        new Tower(1, outerDist, MAP_CY, false),
-        new Tower(2, MAP_W - outerDist, MAP_CY, false)
-    ];
-    if (gameMode === 'SOLO') {
-        towers.push(new Tower(1, 2100, MAP_CY, false));
-        towers.push(new Tower(2, MAP_W - 2100, MAP_CY, false));
+    towers = [];
+    if (gameMode === 'FFA') {
+        [1, 2, 3].forEach(t => {
+            const base = getTeamBase(t);
+            towers.push(new Tower(t, base.x, base.y, true));
+        });
+        // Mỗi đường: 1 trụ mỗi đội (gần căn cứ hơn) để đẩy lane
+        getFfaLanePairs().forEach(([a, b]) => {
+            const ba = getTeamBase(a), bb = getTeamBase(b);
+            const tA = pointToward(ba.x, ba.y, bb.x, bb.y, 620);
+            const tB = pointToward(bb.x, bb.y, ba.x, ba.y, 620);
+            towers.push(new Tower(a, tA.x, tA.y, false));
+            towers.push(new Tower(b, tB.x, tB.y, false));
+        });
+    } else {
+        const nexusDist = gameMode === 'SOLO' ? 720 : 560;
+        const outerDist = gameMode === 'SOLO' ? 1400 : 1050;
+        towers = [
+            new Tower(1, nexusDist, MAP_CY, true),
+            new Tower(2, MAP_W - nexusDist, MAP_CY, true),
+            new Tower(1, outerDist, MAP_CY, false),
+            new Tower(2, MAP_W - outerDist, MAP_CY, false)
+        ];
+        if (gameMode === 'SOLO') {
+            towers.push(new Tower(1, 2100, MAP_CY, false));
+            towers.push(new Tower(2, MAP_W - 2100, MAP_CY, false));
+        }
     }
 
     healRune = { x: MAP_CX, y: MAP_CY, r: 18, active: true, respawnTimer: 0, mesh: createHealRuneMesh() };
@@ -3556,18 +3901,34 @@ function initMatch() {
     camera.position.copy(getIdealCameraPos(camLook, camZoom, camYaw));
     camera.lookAt(camLook);
 
-    document.getElementById('p1-hud-name').innerText = h1.name;
-    document.getElementById('p1-s1-name').innerText = h1.skills[0].name;
-    document.getElementById('p1-s2-name').innerText = h1.skills[1].name;
-    document.getElementById('p1-s3-name').innerText = h1.skills[2].name;
-    document.getElementById('p2-hud-name').innerText = h2.name;
-    document.getElementById('p2-s1-name').innerText = h2.skills[0].name;
-    document.getElementById('p2-s2-name').innerText = h2.skills[1].name;
-    document.getElementById('p2-s3-name').innerText = h2.skills[2].name;
+    const bindHudSkills = (prefix, hero) => {
+        document.getElementById(`${prefix}-hud-name`).innerText = hero.name;
+        document.getElementById(`${prefix}-s1-name`).innerText = hero.skills[0].name;
+        document.getElementById(`${prefix}-s2-name`).innerText = hero.skills[1].name;
+        document.getElementById(`${prefix}-s3-name`).innerText = hero.skills[2].name;
+    };
+    bindHudSkills('p1', h1);
+    bindHudSkills('p2', h2);
 
-    // Highlight local HUD
-    document.querySelector('.p1-hud').classList.toggle('local-hud', localTeam === 1);
-    document.querySelector('.p2-hud').classList.toggle('local-hud', localTeam === 2);
+    document.getElementById('top-bar').classList.toggle('ffa-scores', gameMode === 'FFA');
+    // HUD: luôn hiện cho người local (gắn vào panel p1)
+    const localP = getLocalPlayer();
+    const localHero = localP ? localP.hero : h1;
+    bindHudSkills('p1', localHero);
+    if (gameMode !== 'FFA') bindHudSkills('p2', h2);
+
+    document.querySelector('.p1-hud').style.display = '';
+    document.querySelector('.p2-hud').style.display = gameMode === 'FFA' ? 'none' : '';
+    document.querySelector('.p1-hud').classList.add('local-hud');
+    document.querySelector('.p2-hud').classList.toggle('local-hud', localTeam === 2 && gameMode !== 'FFA');
+
+    const hint = document.getElementById('control-hint-bar');
+    if (hint && gameMode === 'FFA' && isRoomHost) {
+        const parts = ['P1: WASD F/Q/E'];
+        if (players[1] && players[1].isHotseat) parts.push('P2: ←↑↓→ 123');
+        if (players[2] && players[2].isHotseat) parts.push('P3: IJKL 789');
+        hint.textContent = parts.join(' · ');
+    }
 
     const mob = document.getElementById('mobile-controls');
     if (isTouchDevice) mob.classList.add('active');
@@ -3578,12 +3939,23 @@ function initMatch() {
 
 function updateGame(dt) {
     matchTime += dt;
-    if (matchTime - lastWaveTime >= 14) {
+    const waveCd = gameMode === 'FFA' ? 11 : 14;
+    if (matchTime - lastWaveTime >= waveCd) {
         lastWaveTime = matchTime;
-        const gate = gameMode === 'SOLO' ? 1450 : 1100;
-        for (let i = -1; i <= 1; i++) {
-            minions.push(new Minion(1, gate, MAP_CY + i * 42));
-            minions.push(new Minion(2, MAP_W - gate, MAP_CY + i * 42));
+        if (gameMode === 'FFA') {
+            // Giới hạn lính để tránh lag · 3 đường × 2 hướng
+            if (minions.length < 72) {
+                getFfaLanePairs().forEach(([a, b]) => {
+                    spawnMinionWaveAlongLane(a, b, 3);
+                    spawnMinionWaveAlongLane(b, a, 3);
+                });
+            }
+        } else {
+            const gate = gameMode === 'SOLO' ? 1450 : 1100;
+            for (let i = -1; i <= 1; i++) {
+                minions.push(new Minion(1, gate, MAP_CY + i * 42, { tx: MAP_W - 260, ty: MAP_CY }));
+                minions.push(new Minion(2, MAP_W - gate, MAP_CY + i * 42, { tx: 260, ty: MAP_CY }));
+            }
         }
     }
 
@@ -3638,7 +4010,7 @@ function updateGame(dt) {
                     if (proj.aoe > 0) dealAreaDamage(proj.team, proj.owner, proj.x, proj.y, proj.aoe, proj.dmg);
                     else {
                         m.hp -= proj.dmg;
-                        if (m.hp <= 0 && proj.owner) proj.owner.gainXp(25);
+                        if (m.hp <= 0 && proj.owner) proj.owner.gainXp(40);
                     }
                     hit = true; break;
                 }
@@ -3647,7 +4019,12 @@ function updateGame(dt) {
         if (!hit) {
             for (const t of towers) {
                 if (t.team !== proj.team && Math.hypot(t.x - proj.x, t.y - proj.y) <= t.radius + proj.radius) {
-                    t.hp -= proj.dmg; hit = true; break;
+                    t.hp -= proj.dmg;
+                    if (proj.owner) {
+                        t.lastHitBy = proj.owner;
+                        proj.owner.gainXp(t.isNexus ? 8 : 5);
+                    }
+                    hit = true; break;
                 }
             }
         }
@@ -3675,19 +4052,53 @@ function updateGame(dt) {
         if (t.hp > 0) continue;
         if (!t.isNexus) {
             spawnParticles(t.x, t.y, 40, t.color, 8, 6, 0.8);
+            if (t.lastHitBy) t.lastHitBy.gainXp(50);
             t.dispose();
             towers.splice(i, 1);
             continue;
         }
-        if (gameState === 'PLAYING') {
-            gameState = 'GAMEOVER';
-            const winner = t.team === 1 ? 2 : 1;
-            const winText = document.getElementById('winner-text');
-            winText.innerText = `NGƯỜI CHƠI ${winner} CHIẾN THẮNG!`;
-            winText.style.color = winner === 1 ? '#00e8ff' : '#ff2d55';
-            winText.style.textShadow = `0 0 35px ${winner === 1 ? '#00e8ff' : '#ff2d55'}`;
-            document.getElementById('gameover-screen').style.display = 'flex';
+        spawnParticles(t.x, t.y, 55, t.color, 9, 7, 1.0);
+        if (t.lastHitBy) t.lastHitBy.gainXp(120);
+        const deadTeam = t.team;
+        t.dispose();
+        towers.splice(i, 1);
+        for (let j = towers.length - 1; j >= 0; j--) {
+            if (towers[j].team === deadTeam) {
+                towers[j].dispose();
+                towers.splice(j, 1);
+            }
         }
+        // Đội mất Nexus bị loại khỏi trận
+        players.forEach(p => {
+            if (p.team !== deadTeam) return;
+            p.dead = true;
+            p.respawnTimer = 99999;
+            p.hp = 0;
+            if (p.mesh) p.mesh.visible = false;
+        });
+        for (let j = minions.length - 1; j >= 0; j--) {
+            if (minions[j].team === deadTeam) {
+                minions[j].dispose();
+                minions.splice(j, 1);
+            }
+        }
+        if (gameState === 'PLAYING') {
+            const aliveNexus = towers.filter(tw => tw.isNexus);
+            if (aliveNexus.length <= 1) {
+                gameState = 'GAMEOVER';
+                const winner = aliveNexus.length === 1 ? aliveNexus[0].team : (deadTeam === 1 ? 2 : 1);
+                const winText = document.getElementById('winner-text');
+                winText.innerText = winner === localTeam
+                    ? 'BẠN CHIẾN THẮNG!'
+                    : `${TEAM_STYLE[winner]?.label || ('Đội ' + winner)} CHIẾN THẮNG!`;
+                winText.style.color = teamHex(winner);
+                winText.style.textShadow = `0 0 35px ${teamHex(winner)}`;
+                document.getElementById('gameover-screen').style.display = 'flex';
+            } else {
+                addFloatingText(MAP_CX, MAP_CY, `${teamName(deadTeam)} BỊ LOẠI!`, teamHex(deadTeam), 22);
+            }
+        }
+        break;
     }
 
     for (let i = particles.length - 1; i >= 0; i--) {
@@ -3777,11 +4188,16 @@ function updateHUD() {
     const mins = String(Math.floor(matchTime / 60)).padStart(2, '0');
     const secs = String(Math.floor(matchTime % 60)).padStart(2, '0');
     document.getElementById('timer').innerText = `${mins}:${secs}`;
-    const [p1, p2] = players;
-    document.getElementById('p1-kills').innerText = p1.kills;
-    document.getElementById('p2-kills').innerText = p2.kills;
-    updatePlayerHUD('p1', p1);
-    updatePlayerHUD('p2', p2);
+    const p1 = players.find(p => p.team === 1);
+    const p2 = players.find(p => p.team === 2);
+    const p3 = players.find(p => p.team === 3);
+    if (p1) document.getElementById('p1-kills').innerText = p1.kills;
+    if (p2) document.getElementById('p2-kills').innerText = p2.kills;
+    const p3k = document.getElementById('p3-kills');
+    if (p3k) p3k.innerText = p3 ? p3.kills : '0';
+    const local = getLocalPlayer() || p1;
+    if (local) updatePlayerHUD('p1', local);
+    if (gameMode !== 'FFA' && p2) updatePlayerHUD('p2', p2);
 }
 function rankPipsHtml(rank, maxRank) {
     let html = '';
@@ -3809,7 +4225,7 @@ function updatePlayerHUD(prefix, p) {
     const ptsEl = document.getElementById(`${prefix}-skill-points`);
     if (ptsEl) {
         ptsEl.innerText = p.skillPoints > 0
-            ? `✦ ${p.skillPoints} điểm nâng cấp — bấm ô chiêu hoặc Ctrl+F/Q/E`
+            ? `✦ ${p.skillPoints} điểm — bấm ô chiêu sáng vàng (hoặc Ctrl+F/Q/E)`
             : '';
     }
 
