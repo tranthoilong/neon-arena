@@ -1287,7 +1287,7 @@
                         <button class="btn btn-primary" id="btn-create-room">Tạo phòng</button>
                         <button class="btn btn-danger" id="btn-show-join">Vào phòng</button>
                     </div>
-                    <p class="lobby-hint" style="margin-top:0">Cần 2 người trong phòng mới bắt đầu được. Map Solo rộng hơn đấu máy.</p>
+                    <p class="lobby-hint" style="margin-top:0">Online P2P (PeerJS) — gửi mã cho bạn máy khác. Hoặc cùng máy: host bắt đầu, P2 dùng ←↑↓→.</p>
                     <button class="btn btn-ghost btn-full" id="btn-back-solo-menu">Quay lại</button>
                 </div>
             </div>
@@ -1297,10 +1297,11 @@
                     <div class="panel-title">1v1v1 · TAM GIÁC</div>
                     <div class="btn-row" style="margin-bottom:12px;flex-wrap:wrap">
                         <button class="btn btn-primary" id="btn-ffa-ai">Đấu 2 AI</button>
-                        <button class="btn btn-primary" id="btn-ffa-create" style="background:linear-gradient(135deg,#f5c518,#ff6b35);border:none;color:#1a1200">Tạo phòng</button>
-                        <button class="btn btn-danger" id="btn-ffa-join">Vào phòng</button>
+                        <button class="btn btn-primary" id="btn-ffa-create" style="background:linear-gradient(135deg,#f5c518,#ff6b35);border:none;color:#1a1200">Tạo phòng Online</button>
+                        <button class="btn btn-danger" id="btn-ffa-join">Vào phòng Online</button>
+                        <button class="btn btn-ghost" id="btn-ffa-hotseat">Cùng máy (hotseat)</button>
                     </div>
-                    <p class="lobby-hint" style="margin-top:0">Mời tối đa 2 bạn (mã phòng). Slot trống = AI. Cùng máy: P2 ←↑↓→ · P3 IJKL.</p>
+                    <p class="lobby-hint" style="margin-top:0">Online: mã phòng gửi bạn (máy khác). Cùng máy: P2 ←↑↓→ · P3 IJKL · slot trống = AI.</p>
                     <button class="btn btn-ghost btn-full" id="btn-back-ffa-menu">Quay lại</button>
                 </div>
             </div>
@@ -1506,15 +1507,331 @@
 
 
 <script src="./three.min.js"></script>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script>
 /**
  * NEON ARENA 3D — Three.js
- * Logic 2D (x,y) → thế giới 3D (X, Y-up, Z)
+ * Online: PeerJS P2P (host mô phỏng · client nhận state) — không cần backend riêng
  */
 
 const ROOM_STORAGE_KEY = 'neon_arena_rooms_v1';
 let currentRoomCode = null;
 let roomPollTimer = null;
+let gameMode = 'AI'; // 'AI' | 'SOLO' | 'FFA'
+let isRoomHost = true;
+let soloGuestReady = false;
+let pendingRoomMode = 'SOLO';
+let ffaRoomSeats = { guest1: false, guest2: false };
+let onlineMode = false; // true = PeerJS online
+
+/* ========== ONLINE (PeerJS) ========== */
+const net = {
+    role: 'offline', // offline | host | client
+    peer: null,
+    conns: [],
+    teamOfConn: new Map(), // conn -> team
+    remoteInputs: {}, // team -> latest input
+    lastBroadcast: 0,
+    connectedCount: 0,
+    myTeam: 1,
+    pendingStart: null
+};
+function peerRoomId(code) {
+    return 'neonarena' + String(code).toLowerCase();
+}
+function netSend(conn, msg) {
+    if (conn && conn.open) {
+        try { conn.send(msg); } catch (_) {}
+    }
+}
+function netBroadcast(msg) {
+    net.conns.forEach(c => netSend(c, msg));
+}
+function netDestroy() {
+    net.conns.forEach(c => { try { c.close(); } catch (_) {} });
+    if (net.peer) { try { net.peer.destroy(); } catch (_) {} }
+    net.peer = null;
+    net.conns = [];
+    net.teamOfConn.clear();
+    net.remoteInputs = {};
+    net.role = 'offline';
+    net.connectedCount = 0;
+}
+function updateOnlineHostStatus() {
+    const el = document.getElementById('host-status');
+    const btn = document.getElementById('btn-enter-draft-host');
+    if (!el || !btn) return;
+    const n = 1 + net.connectedCount;
+    const max = gameMode === 'FFA' ? 3 : 2;
+    el.innerHTML = `<span class="dot"></span>Online P2P · ${n}/${max} người đã kết nối`;
+    if (net.connectedCount > 0) el.classList.add('ready');
+    btn.disabled = false;
+    btn.textContent = net.connectedCount > 0
+        ? `Vào chọn tướng (${n}/${max})`
+        : 'Bắt đầu (chưa có bạn · slot = AI)';
+}
+function wireNetConn(conn, asHost) {
+    conn.on('open', () => {
+        if (asHost) {
+            if (!net.conns.includes(conn)) net.conns.push(conn);
+            // Gán team: Solo → 2 · FFA → 2 rồi 3
+            let team = 2;
+            if (gameMode === 'FFA') {
+                const used = new Set([...net.teamOfConn.values()]);
+                team = !used.has(2) ? 2 : 3;
+            }
+            net.teamOfConn.set(conn, team);
+            net.connectedCount = net.conns.filter(c => c.open).length;
+            ffaRoomSeats.guest1 = [...net.teamOfConn.values()].includes(2);
+            ffaRoomSeats.guest2 = [...net.teamOfConn.values()].includes(3);
+            soloGuestReady = net.connectedCount > 0;
+            netSend(conn, { type: 'welcome', team, mode: gameMode, code: currentRoomCode });
+            updateOnlineHostStatus();
+        }
+    });
+    conn.on('data', (msg) => onNetMessage(conn, msg));
+    conn.on('close', () => {
+        net.conns = net.conns.filter(c => c !== conn);
+        net.teamOfConn.delete(conn);
+        net.connectedCount = net.conns.filter(c => c.open).length;
+        if (net.role === 'host') updateOnlineHostStatus();
+    });
+    conn.on('error', () => {});
+}
+function onNetMessage(conn, msg) {
+    if (!msg || !msg.type) return;
+    if (msg.type === 'welcome' && net.role === 'client') {
+        net.myTeam = msg.team;
+        localTeam = msg.team;
+        gameMode = msg.mode || gameMode;
+        isRoomHost = false;
+        currentRoomCode = msg.code || currentRoomCode;
+        const st = document.getElementById('join-error');
+        if (st) st.textContent = '';
+        goToDraft(currentRoomCode || 'ONLINE');
+        return;
+    }
+    if (msg.type === 'input' && net.role === 'host') {
+        const team = net.teamOfConn.get(conn) || msg.team;
+        if (team) net.remoteInputs[team] = msg;
+        return;
+    }
+    if (msg.type === 'pick' && net.role === 'host') {
+        const team = net.teamOfConn.get(conn) || msg.team;
+        if (team === 2 && msg.idx != null) { p2Pick = msg.idx; renderDraftUI(); netBroadcast({ type: 'picks', p1Pick, p2Pick, p3Pick }); }
+        if (team === 3 && msg.idx != null) { p3Pick = msg.idx; renderDraftUI(); netBroadcast({ type: 'picks', p1Pick, p2Pick, p3Pick }); }
+        return;
+    }
+    if (msg.type === 'picks' && net.role === 'client') {
+        if (msg.p1Pick != null) p1Pick = msg.p1Pick;
+        if (msg.p2Pick != null) p2Pick = msg.p2Pick;
+        if (msg.p3Pick != null) p3Pick = msg.p3Pick;
+        renderDraftUI();
+        return;
+    }
+    if (msg.type === 'start' && net.role === 'client') {
+        p1Pick = msg.p1Pick; p2Pick = msg.p2Pick; p3Pick = msg.p3Pick ?? p3Pick;
+        gameMode = msg.mode || gameMode;
+        localTeam = net.myTeam;
+        document.getElementById('draft-screen').classList.add('hidden');
+        setTimeout(() => {
+            document.getElementById('hud').style.display = 'block';
+            initMatch();
+        }, 300);
+        return;
+    }
+    if (msg.type === 'state' && net.role === 'client') {
+        applyNetState(msg);
+        return;
+    }
+    if (msg.type === 'over' && net.role === 'client') {
+        gameState = 'GAMEOVER';
+        const winText = document.getElementById('winner-text');
+        winText.innerText = msg.text || 'KẾT THÚC';
+        winText.style.color = msg.color || '#fff';
+        document.getElementById('gameover-screen').style.display = 'flex';
+    }
+}
+function hostOnlineRoom(code) {
+    netDestroy();
+    net.role = 'host';
+    net.myTeam = 1;
+    localTeam = 1;
+    isRoomHost = true;
+    currentRoomCode = code;
+    const el = document.getElementById('host-status');
+    if (el) el.innerHTML = '<span class="dot"></span>Đang mở phòng Online…';
+    if (typeof Peer === 'undefined') {
+        if (el) el.innerHTML = 'Không tải được PeerJS — kiểm tra mạng, hoặc chơi Cùng máy.';
+        net.role = 'offline';
+        return;
+    }
+    const peer = new Peer(peerRoomId(code), { debug: 0 });
+    net.peer = peer;
+    peer.on('open', () => {
+        if (el) el.innerHTML = '<span class="dot"></span>Phòng Online sẵn sàng · chờ bạn kết nối…';
+        updateOnlineHostStatus();
+    });
+    peer.on('connection', (conn) => wireNetConn(conn, true));
+    peer.on('error', (err) => {
+        const msg = (err && err.type) === 'unavailable-id'
+            ? 'Mã phòng đang được dùng — tạo mã khác.'
+            : ('Lỗi Online: ' + (err.message || err.type || 'unknown'));
+        if (el) el.innerHTML = msg;
+    });
+}
+function joinOnlineRoom(code) {
+    netDestroy();
+    net.role = 'client';
+    isRoomHost = false;
+    currentRoomCode = code;
+    const errorEl = document.getElementById('join-error');
+    if (typeof Peer === 'undefined') {
+        if (errorEl) errorEl.textContent = 'Không tải được PeerJS. Kiểm tra mạng.';
+        net.role = 'offline';
+        return;
+    }
+    if (errorEl) errorEl.textContent = 'Đang kết nối Online…';
+    const peer = new Peer({ debug: 0 });
+    net.peer = peer;
+    peer.on('open', () => {
+        const conn = peer.connect(peerRoomId(code), { reliable: true });
+        net.conns = [conn];
+        wireNetConn(conn, false);
+        conn.on('open', () => {
+            if (errorEl) errorEl.textContent = 'Đã kết nối — chờ vào draft…';
+        });
+        conn.on('error', () => {
+            if (errorEl) errorEl.textContent = 'Không kết nối được host. Kiểm tra mã / firewall.';
+        });
+    });
+    peer.on('error', (err) => {
+        if (errorEl) errorEl.textContent = 'Lỗi Peer: ' + (err.message || err.type || 'thử lại');
+    });
+}
+function collectLocalNetInput() {
+    const lp = getLocalPlayer();
+    if (!lp) return null;
+    return {
+        type: 'input',
+        team: lp.team,
+        w: !!keys['KeyW'], a: !!keys['KeyA'], s: !!keys['KeyS'], d: !!keys['KeyD'],
+        f: !!keys['KeyF'],
+        skills: skillQueue.splice(0, skillQueue.length),
+        mx: mouseMap.x, my: mouseMap.y,
+        atx: lp.attackTarget ? lp.attackTarget.x : null,
+        aty: lp.attackTarget ? lp.attackTarget.y : null,
+        hasAtk: !!(lp.attackTarget && !lp.attackTarget.dead),
+        mtx: lp.moveTarget ? lp.moveTarget.x : null,
+        mty: lp.moveTarget ? lp.moveTarget.y : null
+    };
+}
+function applyRemoteNetInput(p, inp, dt) {
+    if (!inp || p.dead) return;
+    // Di chuyển WASD từ client
+    let dx = 0, dy = 0;
+    if (inp.w) dy -= 1; if (inp.s) dy += 1; if (inp.a) dx -= 1; if (inp.d) dx += 1;
+    if (dx || dy) {
+        const len = Math.hypot(dx, dy);
+        p.moveTarget = null; p.attackTarget = null;
+        p.x += (dx / len) * p.speed * (dt * 60);
+        p.y += (dy / len) * p.speed * (dt * 60);
+        p.aimAngle = Math.atan2(dy, dx);
+    } else if (inp.hasAtk && inp.atx != null) {
+        const dist = Math.hypot(inp.atx - p.x, inp.aty - p.y) - 20;
+        const range = p.aaRange || 250;
+        if (dist > range * 0.85) p.moveToward(inp.atx, inp.aty, dt, range * 0.8);
+        p.aimAngle = Math.atan2(inp.aty - p.y, inp.atx - p.x);
+        if (dist <= range && p.cds[0] <= 0) p.tryCast(0);
+    } else if (inp.mtx != null) {
+        p.moveToward(inp.mtx, inp.mty, dt, 10);
+    }
+    if (inp.mx != null) p.aimAngle = Math.atan2(inp.my - p.y, inp.mx - p.x);
+    if (inp.f && p.cds[0] <= 0) p.tryCast(0);
+    if (inp.skills && inp.skills.length) {
+        for (const cmd of inp.skills) {
+            if (cmd.aa) p.tryCast(0);
+            else if (cmd.slot !== undefined) p.tryCast(cmd.slot);
+        }
+    }
+}
+function buildNetState() {
+    return {
+        type: 'state',
+        mt: matchTime,
+        gs: gameState,
+        pl: players.map(p => ([
+            p.team, p.x, p.y, p.hp, p.maxHp, p.dead ? 1 : 0, p.respawnTimer || 0,
+            p.aimAngle, p.level, p.xp, p.resource, p.maxResource, p.kills,
+            p.cds[0], p.cds[1], p.cds[2],
+            p.skillRanks[0], p.skillRanks[1], p.skillRanks[2], p.skillPoints,
+            p.shield || 0
+        ])),
+        mn: minions.slice(0, 60).map(m => [m.team, m.x, m.y, m.hp, m.maxHp]),
+        tw: towers.map(t => [t.team, t.x, t.y, t.hp, t.maxHp, t.isNexus ? 1 : 0]),
+        pr: projectiles.slice(0, 40).map(p => [p.team, p.x, p.y, p.vx, p.vy, p.life, p.radius, p.color, p.dmg, p.aoe || 0])
+    };
+}
+function applyNetState(st) {
+    if (!st || gameState === 'LOBBY') return;
+    matchTime = st.mt;
+    if (st.gs === 'GAMEOVER') return;
+    // Players
+    for (const row of st.pl || []) {
+        const p = players.find(x => x.team === row[0]);
+        if (!p) continue;
+        p.x = row[1]; p.y = row[2]; p.hp = row[3]; p.maxHp = row[4];
+        p.dead = !!row[5]; p.respawnTimer = row[6];
+        p.aimAngle = row[7]; p.level = row[8]; p.xp = row[9];
+        p.resource = row[10]; p.maxResource = row[11]; p.kills = row[12];
+        p.cds = [row[13], row[14], row[15]];
+        p.skillRanks = [row[16], row[17], row[18]]; p.skillPoints = row[19];
+        p.shield = row[20] || 0;
+        if (p.mesh) {
+            p.mesh.visible = !p.dead;
+            p.syncMesh();
+        }
+    }
+    // Minions — rebuild nếu lệch số lượng
+    const wantMn = st.mn || [];
+    while (minions.length > wantMn.length) {
+        const m = minions.pop();
+        m.dispose && m.dispose();
+    }
+    for (let i = 0; i < wantMn.length; i++) {
+        const row = wantMn[i];
+        if (!minions[i]) minions[i] = new Minion(row[0], row[1], row[2]);
+        const m = minions[i];
+        m.team = row[0]; m.x = row[1]; m.y = row[2]; m.hp = row[3]; m.maxHp = row[4];
+        m.color = teamSoft(m.team);
+        if (m.mesh) m.mesh.position.set(wx(m.x), 0, wz(m.y));
+    }
+    // Towers
+    for (const row of st.tw || []) {
+        let t = towers.find(x => x.team === row[0] && !!x.isNexus === !!row[5] && Math.hypot(x.x - row[1], x.y - row[2]) < 80);
+        if (!t) t = towers.find(x => x.team === row[0] && !!x.isNexus === !!row[5]);
+        if (!t) continue;
+        t.hp = row[3]; t.maxHp = row[4];
+        if (t.mesh) t.mesh.position.set(wx(t.x), 0, wz(t.y));
+    }
+    // Projectiles — đơn giản: xóa & tạo lại thưa
+    if ((st.pr || []).length !== projectiles.length) {
+        projectiles.forEach(p => { if (p.mesh) scene.remove(p.mesh); });
+        projectiles = [];
+        for (const row of st.pr || []) {
+            spawnProjectile({
+                team: row[0], x: row[1], y: row[2], vx: row[3], vy: row[4],
+                life: row[5], radius: row[6], color: row[7], dmg: row[8], aoe: row[9], owner: null
+            });
+        }
+    } else {
+        for (let i = 0; i < projectiles.length; i++) {
+            const row = st.pr[i], p = projectiles[i];
+            p.x = row[1]; p.y = row[2]; p.vx = row[3]; p.vy = row[4]; p.life = row[5];
+            if (p.mesh) p.mesh.position.set(wx(p.x), 1.4, wz(p.y));
+        }
+    }
+}
 
 function showLobbyView(id) {
     document.querySelectorAll('.lobby-view').forEach(v => v.classList.remove('active'));
@@ -1538,11 +1855,6 @@ function generateRoomCode() {
     for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
     return code;
 }
-let gameMode = 'AI'; // 'AI' | 'SOLO' | 'FFA'
-let isRoomHost = true;
-let soloGuestReady = false;
-let pendingRoomMode = 'SOLO'; // chế độ khi tạo/vào phòng
-let ffaRoomSeats = { guest1: false, guest2: false }; // host theo dõi slot
 
 const TEAM_STYLE = {
     1: { hex: '#00e8ff', three: 0x00e8ff, soft: '#38bdf8', soft3: 0x38bdf8, name: 'Xanh', label: 'Đội xanh' },
@@ -1610,10 +1922,22 @@ function goToDraft(code) {
     }
     document.getElementById('lobby-screen').classList.add('hidden');
     document.getElementById('draft-screen').classList.remove('hidden');
+    const startBtn = document.getElementById('start-btn');
+    if (startBtn) {
+        if (net.role === 'client') {
+            startBtn.textContent = 'Chờ chủ phòng bắt đầu…';
+            startBtn.disabled = true;
+        } else {
+            startBtn.textContent = 'Bắt đầu trận đấu';
+            startBtn.disabled = false;
+        }
+    }
     renderDraftUI();
 }
 
 document.getElementById('btn-mode-ai').addEventListener('click', () => {
+    netDestroy();
+    onlineMode = false;
     gameMode = 'AI';
     localTeam = 1;
     isRoomHost = true;
@@ -1626,6 +1950,8 @@ document.getElementById('btn-mode-ffa').addEventListener('click', () => {
     showLobbyView('lobby-ffa-menu');
 });
 document.getElementById('btn-ffa-ai').addEventListener('click', () => {
+    netDestroy();
+    onlineMode = false;
     gameMode = 'FFA';
     localTeam = 1;
     isRoomHost = true;
@@ -1635,6 +1961,17 @@ document.getElementById('btn-ffa-ai').addEventListener('click', () => {
 });
 document.getElementById('btn-ffa-create').addEventListener('click', () => startCreateRoom('FFA'));
 document.getElementById('btn-ffa-join').addEventListener('click', () => openJoinRoom('FFA'));
+document.getElementById('btn-ffa-hotseat').addEventListener('click', () => {
+    netDestroy();
+    onlineMode = false;
+    gameMode = 'FFA';
+    localTeam = 1;
+    isRoomHost = true;
+    currentRoomCode = null;
+    // Giả lập 2 ghế hotseat cùng máy
+    ffaRoomSeats = { guest1: true, guest2: true };
+    goToDraft('FFA-HOTSEAT');
+});
 document.getElementById('btn-back-ffa-menu').addEventListener('click', () => showLobbyView('lobby-home'));
 
 document.getElementById('btn-mode-solo').addEventListener('click', () => {
@@ -1649,63 +1986,26 @@ function startCreateRoom(mode) {
     gameMode = mode;
     isRoomHost = true;
     soloGuestReady = false;
+    onlineMode = true;
     ffaRoomSeats = { guest1: false, guest2: false };
-    let rooms = pruneOldRooms(getRooms());
+    if (roomPollTimer) { clearInterval(roomPollTimer); roomPollTimer = null; }
     let code = generateRoomCode();
-    while (rooms[code]) code = generateRoomCode();
-    rooms[code] = {
-        created: Date.now(),
-        hostReady: true,
-        guestJoined: false,
-        guest2Joined: false,
-        mode
-    };
-    saveRooms(rooms);
     currentRoomCode = code;
-    document.getElementById('create-room-title').textContent = mode === 'FFA' ? 'PHÒNG 1v1v1' : 'PHÒNG SOLO';
+    document.getElementById('create-room-title').textContent = mode === 'FFA' ? 'PHÒNG 1v1v1 ONLINE' : 'PHÒNG SOLO ONLINE';
     document.getElementById('created-room-code').textContent = code;
-    document.getElementById('host-status').innerHTML = mode === 'FFA'
-        ? '<span class="dot"></span>Phòng 1/3 · Chờ bạn bè nhập mã… (có thể bắt đầu với AI)'
-        : '<span class="dot"></span>Đang chờ người chơi khác nhập mã…';
     document.getElementById('host-status').classList.remove('ready');
     const enterBtn = document.getElementById('btn-enter-draft-host');
-    if (mode === 'FFA') {
-        enterBtn.disabled = false;
-        enterBtn.textContent = 'Bắt đầu (slot trống = AI)';
-    } else {
-        enterBtn.disabled = true;
-        enterBtn.textContent = 'Chờ đối thủ…';
-    }
+    enterBtn.disabled = false;
+    enterBtn.textContent = 'Vào chọn tướng (trống = AI)';
     showLobbyView('lobby-create');
-    if (roomPollTimer) clearInterval(roomPollTimer);
-    roomPollTimer = setInterval(() => {
-        const r = getRooms()[code];
-        if (!r) return;
-        if (mode === 'FFA') {
-            ffaRoomSeats.guest1 = !!r.guestJoined;
-            ffaRoomSeats.guest2 = !!r.guest2Joined;
-            const n = 1 + (r.guestJoined ? 1 : 0) + (r.guest2Joined ? 1 : 0);
-            const st = document.getElementById('host-status');
-            st.innerHTML = `<span class="dot"></span>Người trong phòng: ${n}/3` +
-                (r.guestJoined ? ' · Đỏ đã vào' : '') +
-                (r.guest2Joined ? ' · Vàng đã vào' : '');
-            if (n >= 2) st.classList.add('ready');
-            enterBtn.disabled = false;
-            enterBtn.textContent = n >= 3 ? 'Đủ 3 người · Vào chọn tướng' : 'Vào chọn tướng (trống = AI)';
-        } else if (r.guestJoined) {
-            soloGuestReady = true;
-            document.getElementById('host-status').innerHTML = 'Đối thủ đã vào! Có thể bắt đầu.';
-            document.getElementById('host-status').classList.add('ready');
-            enterBtn.disabled = false;
-            enterBtn.textContent = 'Vào chọn tướng';
-        }
-    }, 400);
+    hostOnlineRoom(code);
 }
 
 function openJoinRoom(mode) {
     pendingRoomMode = mode;
     gameMode = mode;
-    document.getElementById('join-room-title').textContent = mode === 'FFA' ? 'VÀO PHÒNG 1v1v1' : 'NHẬP MÃ PHÒNG';
+    onlineMode = true;
+    document.getElementById('join-room-title').textContent = mode === 'FFA' ? 'VÀO PHÒNG 1v1v1 ONLINE' : 'VÀO PHÒNG SOLO ONLINE';
     document.getElementById('join-error').textContent = '';
     document.getElementById('join-code-input').value = '';
     showLobbyView('lobby-join');
@@ -1726,66 +2026,22 @@ document.getElementById('btn-copy-code').addEventListener('click', async () => {
     }
 });
 document.getElementById('btn-enter-draft-host').addEventListener('click', () => {
-    if (gameMode === 'SOLO' && !soloGuestReady) {
-        const r = getRooms()[currentRoomCode];
-        if (!(r && r.guestJoined)) return;
-        soloGuestReady = true;
-    }
-    if (gameMode === 'FFA' && currentRoomCode) {
-        const r = getRooms()[currentRoomCode];
-        ffaRoomSeats.guest1 = !!(r && r.guestJoined);
-        ffaRoomSeats.guest2 = !!(r && r.guest2Joined);
-    }
     localTeam = 1;
     isRoomHost = true;
+    if (onlineMode) {
+        ffaRoomSeats.guest1 = [...net.teamOfConn.values()].includes(2);
+        ffaRoomSeats.guest2 = [...net.teamOfConn.values()].includes(3);
+        soloGuestReady = net.connectedCount > 0;
+    }
     goToDraft(currentRoomCode || gameMode);
 });
 document.getElementById('btn-join-room').addEventListener('click', () => {
     const raw = document.getElementById('join-code-input').value.trim().toUpperCase();
     const errorEl = document.getElementById('join-error');
     if (!/^[A-Z0-9]{6}$/.test(raw)) { errorEl.textContent = 'Mã phòng gồm đúng 6 ký tự.'; return; }
-    const rooms = getRooms();
-    const room = rooms[raw];
-    if (!room) { errorEl.textContent = 'Không tìm thấy phòng. Kiểm tra lại mã.'; return; }
-
-    const mode = room.mode || 'SOLO';
-    if (pendingRoomMode === 'FFA' && mode !== 'FFA') {
-        errorEl.textContent = 'Đây là phòng Solo, không phải 1v1v1.'; return;
-    }
-    if (pendingRoomMode === 'SOLO' && mode === 'FFA') {
-        errorEl.textContent = 'Đây là phòng 1v1v1 — vào từ menu 1v1v1.'; return;
-    }
-
-    if (mode === 'FFA') {
-        if (!room.guestJoined) {
-            room.guestJoined = true;
-            localTeam = 2;
-        } else if (!room.guest2Joined) {
-            room.guest2Joined = true;
-            localTeam = 3;
-        } else {
-            errorEl.textContent = 'Phòng đã đủ 3 người.'; return;
-        }
-        rooms[raw] = room;
-        saveRooms(rooms);
-        gameMode = 'FFA';
-        isRoomHost = false;
-        soloGuestReady = true;
-        ffaRoomSeats = { guest1: !!room.guestJoined, guest2: !!room.guest2Joined };
-        errorEl.textContent = '';
-        goToDraft(raw);
-        return;
-    }
-
-    room.guestJoined = true;
-    rooms[raw] = room;
-    saveRooms(rooms);
-    errorEl.textContent = '';
-    gameMode = 'SOLO';
-    localTeam = 2;
-    isRoomHost = false;
-    soloGuestReady = true;
-    goToDraft(raw);
+    onlineMode = true;
+    gameMode = pendingRoomMode;
+    joinOnlineRoom(raw);
 });
 document.getElementById('join-code-input').addEventListener('keydown', e => {
     if (e.key === 'Enter') document.getElementById('btn-join-room').click();
@@ -1845,11 +2101,24 @@ function renderDraftUI() {
     const p3Grid = document.getElementById('p3-grid');
     p1Grid.innerHTML = ''; p2Grid.innerHTML = '';
     if (p3Grid) p3Grid.innerHTML = '';
+    const canEdit = (team) => {
+        if (net.role === 'offline') return true;
+        if (net.role === 'host') return true; // host chọn hộ / mặc định
+        return localTeam === team; // client chỉ sửa đội mình
+    };
+    const onPick = (team, idx) => {
+        if (team === 1) p1Pick = idx;
+        if (team === 2) p2Pick = idx;
+        if (team === 3) p3Pick = idx;
+        if (net.role === 'host') netBroadcast({ type: 'picks', p1Pick, p2Pick, p3Pick });
+        if (net.role === 'client') netSend(net.conns[0], { type: 'pick', team, idx });
+        renderDraftUI();
+    };
     HEROES.forEach((h, idx) => {
-        p1Grid.appendChild(createHeroCard(h, idx === p1Pick, () => { p1Pick = idx; renderDraftUI(); }));
-        p2Grid.appendChild(createHeroCard(h, idx === p2Pick, () => { p2Pick = idx; renderDraftUI(); }));
+        p1Grid.appendChild(createHeroCard(h, idx === p1Pick, () => { if (canEdit(1)) onPick(1, idx); }));
+        p2Grid.appendChild(createHeroCard(h, idx === p2Pick, () => { if (canEdit(2)) onPick(2, idx); }));
         if (p3Grid && gameMode === 'FFA') {
-            p3Grid.appendChild(createHeroCard(h, idx === p3Pick, () => { p3Pick = idx; renderDraftUI(); }));
+            p3Grid.appendChild(createHeroCard(h, idx === p3Pick, () => { if (canEdit(3)) onPick(3, idx); }));
         }
     });
     renderPickShowcase(document.getElementById('p1-showcase'), HEROES[p1Pick], 'Đội xanh · Đã chọn', '#00e8ff');
@@ -1890,24 +2159,54 @@ let bushes = [];
 function rebuildBushes() {
     bushes = [];
     const rows = [0.28, 0.72];
-    const cols = gameMode === 'SOLO' ? 5 : 4;
+    const cols = gameMode === 'SOLO' ? 5 : gameMode === 'FFA' ? 5 : 4;
     for (const ry of rows) {
         for (let i = 0; i < cols; i++) {
             const t = (i + 1) / (cols + 1);
             bushes.push({
                 x: MAP_W * (0.18 + t * 0.64),
                 y: MAP_H * ry + (i % 2 ? 40 : -40),
-                r: 70 + (i % 3) * 8
+                r: 78 + (i % 3) * 10
             });
         }
     }
-    // mid river bushes
-    bushes.push({ x: MAP_CX - 120, y: MAP_CY - 90, r: 58 });
-    bushes.push({ x: MAP_CX + 120, y: MAP_CY + 90, r: 58 });
-    if (gameMode === 'SOLO') {
-        bushes.push({ x: MAP_CX, y: MAP_CY - 220, r: 64 });
-        bushes.push({ x: MAP_CX, y: MAP_CY + 220, r: 64 });
+    bushes.push({ x: MAP_CX - 120, y: MAP_CY - 90, r: 68 });
+    bushes.push({ x: MAP_CX + 120, y: MAP_CY + 90, r: 68 });
+    if (gameMode === 'SOLO' || gameMode === 'FFA') {
+        bushes.push({ x: MAP_CX, y: MAP_CY - 220, r: 72 });
+        bushes.push({ x: MAP_CX, y: MAP_CY + 220, r: 72 });
     }
+    if (gameMode === 'FFA') {
+        // Bụi gần 3 đường tam giác
+        getFfaLanePairs().forEach(([a, b]) => {
+            const ba = getTeamBase(a), bb = getTeamBase(b);
+            const mid = { x: (ba.x + bb.x) / 2, y: (ba.y + bb.y) / 2 };
+            const side = Math.atan2(bb.y - ba.y, bb.x - ba.x) + Math.PI / 2;
+            bushes.push({ x: mid.x + Math.cos(side) * 140, y: mid.y + Math.sin(side) * 140, r: 85 });
+            bushes.push({ x: mid.x - Math.cos(side) * 140, y: mid.y - Math.sin(side) * 140, r: 85 });
+        });
+    }
+}
+
+function getBushAt(x, y) {
+    for (let i = 0; i < bushes.length; i++) {
+        const b = bushes[i];
+        if (Math.hypot(x - b.x, y - b.y) < b.r) return b;
+    }
+    return null;
+}
+/** Tầm nhìn kiểu LMHT: địch trong bụi chỉ hiện nếu viewer cũng trong cùng bụi */
+function hasVisionOf(viewerX, viewerY, viewerTeam, target) {
+    if (!target || target.dead) return false;
+    if (viewerTeam === target.team) return true;
+    const hideBush = getBushAt(target.x, target.y);
+    if (!hideBush) return true;
+    const viewBush = getBushAt(viewerX, viewerY);
+    return viewBush === hideBush;
+}
+function canUnitSee(viewer, target) {
+    if (!viewer || !target) return true;
+    return hasVisionOf(viewer.x, viewer.y, viewer.team, target);
 }
 
 function configureMapForMode() {
@@ -2385,39 +2684,74 @@ function createFountain(x, y, color) {
 
 function createBush(b) {
     const g = new THREE.Group();
-    const trunk = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.25, 0.35, 0.8, 8),
-        new THREE.MeshStandardMaterial({ color: 0x3b2a1a, roughness: 0.9 })
-    );
-    trunk.position.y = 0.4;
-    g.add(trunk);
+    const s = Math.max(0.85, (b.r || 70) * SCALE * 0.55);
 
-    for (let i = 0; i < 7; i++) {
+    // Nền rêu / bóng bụi
+    const moss = new THREE.Mesh(
+        new THREE.CircleGeometry(2.8 * s, 24),
+        new THREE.MeshStandardMaterial({
+            color: 0x0a1f14, emissive: 0x062a18, emissiveIntensity: 0.35,
+            transparent: true, opacity: 0.75, roughness: 1
+        })
+    );
+    moss.rotation.x = -Math.PI / 2;
+    moss.position.y = 0.04;
+    g.add(moss);
+
+    // Vòng sương neon (gợi ý khu vực núp)
+    const mist = new THREE.Mesh(
+        new THREE.RingGeometry(2.2 * s, 3.1 * s, 40),
+        new THREE.MeshBasicMaterial({ color: 0x34d399, transparent: true, opacity: 0.18, side: THREE.DoubleSide })
+    );
+    mist.rotation.x = -Math.PI / 2;
+    mist.position.y = 0.08;
+    g.add(mist);
+
+    // Thân / gốc
+    for (let t = 0; t < 3; t++) {
+        const trunk = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.12 * s, 0.22 * s, 0.7 * s, 6),
+            new THREE.MeshStandardMaterial({ color: 0x2a1c12, roughness: 0.95 })
+        );
+        trunk.position.set((Math.random() - 0.5) * 1.2 * s, 0.35 * s, (Math.random() - 0.5) * 1.2 * s);
+        g.add(trunk);
+    }
+
+    // Tán lá dày nhiều lớp
+    const leafCount = 14;
+    for (let i = 0; i < leafCount; i++) {
+        const hue = 0.32 + Math.random() * 0.12;
         const leaf = new THREE.Mesh(
-            new THREE.IcosahedronGeometry(0.9 + Math.random() * 0.55, 0),
+            new THREE.IcosahedronGeometry((0.55 + Math.random() * 0.7) * s, 0),
             new THREE.MeshStandardMaterial({
-                color: new THREE.Color().setHSL(0.38 + Math.random() * 0.06, 0.65, 0.28 + Math.random() * 0.1),
-                emissive: 0x053320,
-                emissiveIntensity: 0.4,
+                color: new THREE.Color().setHSL(hue, 0.7, 0.22 + Math.random() * 0.14),
+                emissive: new THREE.Color().setHSL(hue, 0.8, 0.08),
+                emissiveIntensity: 0.55,
                 flatShading: true,
                 transparent: true,
-                opacity: 0.88
+                opacity: 0.82 + Math.random() * 0.12,
+                roughness: 0.7
             })
         );
-        leaf.position.set((Math.random() - 0.5) * 2.4, 1.2 + Math.random() * 1.1, (Math.random() - 0.5) * 2.4);
-        leaf.castShadow = false;
+        const ang = (i / leafCount) * Math.PI * 2 + Math.random() * 0.4;
+        const rad = (0.4 + Math.random() * 1.6) * s;
+        leaf.position.set(Math.cos(ang) * rad, (0.9 + Math.random() * 1.6) * s, Math.sin(ang) * rad);
+        leaf.rotation.set(Math.random(), Math.random(), Math.random());
         g.add(leaf);
     }
-    // soft aura ring
-    const aura = new THREE.Mesh(
-        new THREE.RingGeometry(2.4, 2.7, 32),
-        new THREE.MeshBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.22, side: THREE.DoubleSide })
-    );
-    aura.rotation.x = -Math.PI / 2;
-    aura.position.y = 0.06;
-    g.add(aura);
+
+    // Đốm sáng nhỏ trong bụi
+    for (let i = 0; i < 4; i++) {
+        const spark = new THREE.Mesh(
+            new THREE.SphereGeometry(0.08 * s, 6, 6),
+            new THREE.MeshBasicMaterial({ color: 0x6ee7b7, transparent: true, opacity: 0.7 })
+        );
+        spark.position.set((Math.random() - 0.5) * 2.2 * s, (1.2 + Math.random()) * s, (Math.random() - 0.5) * 2.2 * s);
+        g.add(spark);
+    }
 
     g.position.set(wx(b.x), 0, wz(b.y));
+    g.userData.isBush = true;
     (arenaGroup || scene).add(g);
 }
 
@@ -2754,7 +3088,7 @@ class Tower {
         this.radius = isNexus ? 46 : 36;
         this.maxHp = isNexus ? 2800 : 1400; // trụ yếu hơn — dễ phá
         this.hp = this.maxHp;
-        this.range = isNexus ? 220 : 190;
+        this.range = isNexus ? 260 : 230;
         this.fireCd = 0;
         this.color = teamHex(team);
         this.rot = 0;
@@ -2763,26 +3097,60 @@ class Tower {
         if (!isNexus) this.mesh.scale.setScalar(0.82);
         scene.add(this.mesh);
     }
+    inRange(ent) {
+        if (!ent || ent.dead) return false;
+        const d = Math.hypot(ent.x - this.x, ent.y - this.y) - (ent.radius || 0);
+        return d <= this.range;
+    }
+    pickTarget() {
+        // Trụ có true sight (vẫn bắn tướng trong bụi nếu trong tầm)
+        const enemyChamps = players.filter(p => p.team !== this.team && !p.dead && this.inRange(p));
+        const enemyMins = minions.filter(m => m.team !== this.team && this.inRange(m));
+
+        // 1) Ưu tiên tướng vừa đánh tướng đồng minh (aggro dưới trụ — kiểu LMHT)
+        let agro = null, agroD = 1e9;
+        for (const p of enemyChamps) {
+            if ((p.towerAgroUntil || 0) > matchTime) {
+                const d = Math.hypot(p.x - this.x, p.y - this.y);
+                if (d < agroD) { agroD = d; agro = p; }
+            }
+        }
+        if (agro) return agro;
+
+        // 2) Có lính trong tầm → bắn lính gần nhất
+        let bestM = null, bestMD = 1e9;
+        for (const m of enemyMins) {
+            const d = Math.hypot(m.x - this.x, m.y - this.y);
+            if (d < bestMD) { bestMD = d; bestM = m; }
+        }
+        if (bestM) return bestM;
+
+        // 3) Không còn lính → bắn tướng địch gần nhất
+        let bestP = null, bestPD = 1e9;
+        for (const p of enemyChamps) {
+            const d = Math.hypot(p.x - this.x, p.y - this.y);
+            if (d < bestPD) { bestPD = d; bestP = p; }
+        }
+        return bestP;
+    }
     update(dt) {
         this.rot += dt * 1.2;
         if (this.fireCd > 0) this.fireCd -= dt;
         this.mesh.userData.core.rotation.y += dt * 1.5;
         this.mesh.userData.body.rotation.y = this.rot * 0.3;
 
-        let target = null, minDist = this.range;
-        const enemies = [...minions.filter(m => m.team !== this.team), ...players.filter(p => p.team !== this.team && !p.dead)];
-        for (const e of enemies) {
-            const d = Math.hypot(e.x - this.x, e.y - this.y);
-            if (d <= minDist) { minDist = d; target = e; }
-        }
+        const target = this.pickTarget();
         this.currentTarget = target;
         if (target && this.fireCd <= 0) {
-            this.fireCd = 1.45; // bắn chậm hơn
+            this.fireCd = 1.2;
             const angle = Math.atan2(target.y - this.y, target.x - this.x);
+            const isChamp = target.hero != null;
             spawnProjectile({
-                team: this.team, x: this.x, y: this.y,
-                vx: Math.cos(angle) * 6.5, vy: Math.sin(angle) * 6.5,
-                radius: 8, dmg: 85, color: this.color, life: 1.5, aoe: 0
+                team: this.team, owner: null, x: this.x, y: this.y,
+                vx: Math.cos(angle) * 7.5, vy: Math.sin(angle) * 7.5,
+                radius: isChamp ? 10 : 8,
+                dmg: isChamp ? 110 : 85,
+                color: this.color, life: 1.6, aoe: 0
             });
         }
         if ((this._hpTick = (this._hpTick || 0) + 1) % 3 === 0) {
@@ -2822,7 +3190,7 @@ class Minion {
         let target = null, minDist = 160;
         const enemies = [
             ...minions.filter(m => m.team !== this.team),
-            ...players.filter(p => p.team !== this.team && !p.dead),
+            ...players.filter(p => p.team !== this.team && !p.dead && hasVisionOf(this.x, this.y, this.team, p)),
             ...towers.filter(t => t.team !== this.team)
         ];
         for (const e of enemies) {
@@ -2917,6 +3285,7 @@ class Player {
         this.dead = false; this.respawnTimer = 0;
         this.aiTimer = 0;
         this.aiRetreat = false;
+        this.towerAgroUntil = 0;
         this.isHotseat = !!opts.isHotseat;
         this.mesh = createHeroMesh(heroData, team);
         this.mesh.position.set(wx(x), 0, wz(y));
@@ -2977,6 +3346,10 @@ class Player {
             else { actualDmg -= this.shield; this.shield = 0; }
         }
         this.hp -= actualDmg;
+        // Aggro trụ: đánh tướng địch khi đang trong tầm trụ của họ
+        if (attackerPlayer && attackerPlayer.team !== this.team) {
+            attackerPlayer.towerAgroUntil = matchTime + 3.2;
+        }
         if (this.resourceType === 'fury' && actualDmg > 0) {
             this.resource = Math.min(this.maxResource, this.resource + actualDmg * 0.04);
         }
@@ -3020,7 +3393,7 @@ class Player {
     findNearestEnemy(maxRange = 520) {
         let best = null, bestD = maxRange;
         const pool = [
-            ...players.filter(p => p.team !== this.team && !p.dead),
+            ...players.filter(p => p.team !== this.team && !p.dead && canUnitSee(this, p)),
             ...minions.filter(m => m.team !== this.team),
             ...towers.filter(t => t.team !== this.team)
         ];
@@ -3117,10 +3490,10 @@ class Player {
     }
     updateAI(dt) {
         this.aiTimer -= dt;
-        // Chọn tướng địch gần nhất (quan trọng ở 1v1v1)
+        // Chọn tướng địch gần nhất (có tầm nhìn — không thấy địch núp bụi)
         let enemy = null, enemyBest = 1e9;
         for (const p of players) {
-            if (p.team === this.team || p.dead) continue;
+            if (p.team === this.team || p.dead || !canUnitSee(this, p)) continue;
             const d = Math.hypot(p.x - this.x, p.y - this.y);
             if (d < enemyBest) { enemyBest = d; enemy = p; }
         }
@@ -3374,6 +3747,11 @@ class Player {
             }
         }
 
+        // Mất tầm nhìn (địch núp bụi) → bỏ tấn
+        if (this.attackTarget && this.attackTarget.team !== undefined && this.attackTarget.team !== this.team) {
+            if (this.attackTarget.dead || !canUnitSee(this, this.attackTarget)) this.attackTarget = null;
+        }
+
         // Click: đuổi đánh / di chuyển
         if (!usedMove && this.attackTarget && !this.attackTarget.dead && (this.attackTarget.hp === undefined || this.attackTarget.hp > 0)) {
             const t = this.attackTarget;
@@ -3433,7 +3811,12 @@ class Player {
         }
         if (this.stunTimer > 0) { this.stunTimer -= dt; this.syncMesh(); return; }
 
-        if (this.isLocal) this.updateLocal(dt);
+        if (this.isNetPuppet) {
+            // Client: vị trí do host sync — chỉ xử lý input gửi đi ở gameLoop
+        } else if (this.isNetRemote) {
+            const inp = net.remoteInputs[this.team];
+            applyRemoteNetInput(this, inp, dt);
+        } else if (this.isLocal) this.updateLocal(dt);
         else if (this.isHotseat) this.updateHotseat(dt);
         else if (this.isAI) this.updateAI(dt);
 
@@ -3480,17 +3863,42 @@ class Player {
         }
     }
     syncMesh() {
-        const inBush = bushes.some(b => Math.hypot(this.x - b.x, this.y - b.y) < b.r);
+        const inBush = !!getBushAt(this.x, this.y);
+        this.inBush = inBush;
         this.mesh.position.set(wx(this.x), 0, wz(this.y));
         this.mesh.rotation.y = -this.aimAngle + Math.PI / 2;
-        this.mesh.userData.body.material.opacity = inBush ? 0.4 : 1;
-        this.mesh.userData.body.material.transparent = inBush;
-        this.mesh.userData.shieldRing.material.opacity = this.shield > 0 ? 0.9 : 0;
+
+        // Stealth: địch trong bụi ẩn với người xem (trừ khi cùng bụi / đồng đội)
+        const viewer = getLocalPlayer();
+        const revealed = !viewer || canUnitSee(viewer, this);
+        const show = !this.dead && revealed;
+        this.mesh.visible = show;
+
+        // Bản thân núp: vẫn thấy mình (mờ) · đồng đội trong bụi hơi mờ
+        const body = this.mesh.userData.body;
+        const head = this.mesh.userData.head;
+        if (body) {
+            if (this.isLocal && inBush) {
+                body.material.transparent = true;
+                body.material.opacity = 0.5;
+                if (head) { head.material.transparent = true; head.material.opacity = 0.55; }
+            } else if (show && inBush && viewer && viewer.team === this.team) {
+                body.material.transparent = true;
+                body.material.opacity = 0.7;
+            } else if (show) {
+                body.material.opacity = 1;
+                body.material.transparent = false;
+                if (head) { head.material.opacity = 1; head.material.transparent = false; }
+            }
+        }
+
+        this.mesh.userData.shieldRing.material.opacity = (show && this.shield > 0) ? 0.9 : 0;
         if (this.shield > 0) this.mesh.userData.shieldRing.rotation.z += 0.05;
-        if ((this._hpTick = (this._hpTick || 0) + 1) % 2 === 0) {
+        if (this.mesh.userData.hpBar) this.mesh.userData.hpBar.visible = show;
+        if (show && (this._hpTick = (this._hpTick || 0) + 1) % 2 === 0) {
             updateHealthBarSprite(this.mesh.userData.hpBar, this.hp, this.maxHp, teamHex(this.team), this.shield);
         }
-        this.mesh.userData.hpBar.quaternion.copy(camera.quaternion);
+        if (this.mesh.userData.hpBar) this.mesh.userData.hpBar.quaternion.copy(camera.quaternion);
     }
     castSkill(slot, moveAngle, autoAngle = moveAngle) {
         const rank = Math.max(1, this.skillRanks[slot] || 1);
@@ -3624,6 +4032,20 @@ function createHealRuneMesh() {
 }
 
 document.getElementById('start-btn').addEventListener('click', () => {
+    if (net.role === 'client') {
+        alert('Chỉ chủ phòng mới bắt đầu trận. Chờ host nhấn Bắt đầu.');
+        return;
+    }
+    if (net.role === 'host') {
+        ffaRoomSeats.guest1 = [...net.teamOfConn.values()].includes(2);
+        ffaRoomSeats.guest2 = [...net.teamOfConn.values()].includes(3);
+        netBroadcast({
+            type: 'start',
+            mode: gameMode,
+            p1Pick, p2Pick, p3Pick,
+            seats: { g1: ffaRoomSeats.guest1, g2: ffaRoomSeats.guest2 }
+        });
+    }
     document.getElementById('draft-screen').classList.add('hidden');
     setTimeout(() => {
         document.getElementById('hud').style.display = 'block';
@@ -3657,9 +4079,11 @@ function screenToMap(clientX, clientY) {
 
 function findClickTarget(mapPos, team) {
     if (!mapPos) return null;
+    const viewer = players.find(p => p.team === team && !p.dead) || getLocalPlayer();
     let best = null, bestD = 55;
     for (const p of players) {
         if (p.team === team || p.dead) continue;
+        if (viewer && !canUnitSee(viewer, p)) continue; // không click được địch đang núp
         const d = Math.hypot(p.x - mapPos.x, p.y - mapPos.y);
         if (d < bestD) { bestD = d; best = p; }
     }
@@ -3805,6 +4229,8 @@ function initMatch() {
     gameState = 'PLAYING';
     matchTime = 0;
     lastWaveTime = -12;
+    net._sentOver = false;
+    net.lastBroadcast = 0;
     camZoom = gameMode === 'SOLO' ? 1.05 : gameMode === 'FFA' ? 1.12 : 0.92;
     camYaw = 0.2;
     skillQueue = [];
@@ -3815,32 +4241,39 @@ function initMatch() {
     const b1 = getTeamBase(1), b2 = getTeamBase(2), b3 = getTeamBase(3);
 
     if (gameMode === 'FFA') {
-        const room = currentRoomCode ? getRooms()[currentRoomCode] : null;
-        const hasG1 = !!(room && room.guestJoined) || ffaRoomSeats.guest1;
-        const hasG2 = !!(room && room.guest2Joined) || ffaRoomSeats.guest2;
+        const hasG1 = onlineMode
+            ? (net.role === 'host' ? [...net.teamOfConn.values()].includes(2) : false) || ffaRoomSeats.guest1
+            : ffaRoomSeats.guest1;
+        const hasG2 = onlineMode
+            ? (net.role === 'host' ? [...net.teamOfConn.values()].includes(3) : false) || ffaRoomSeats.guest2
+            : ffaRoomSeats.guest2;
 
         const p1 = new Player(1, h1, b1.x, b1.y, { isLocal: false, isAI: false });
         const p2 = new Player(2, h2, b2.x, b2.y, { isLocal: false, isAI: false });
         const p3 = new Player(3, h3, b3.x, b3.y, { isLocal: false, isAI: false });
 
-        if (isRoomHost) {
-            // Host cùng máy: P1 local · P2/P3 hotseat nếu đã vào phòng, không thì AI
+        if (net.role === 'host' || (net.role === 'offline' && isRoomHost)) {
             localTeam = 1;
             p1.isLocal = true; p1.isAI = false;
-            if (hasG1) { p2.isHotseat = true; p2.hotseatScheme = 'arrows'; p2.isAI = false; }
+            if (onlineMode && hasG1) { p2.isNetRemote = true; p2.isAI = false; }
+            else if (!onlineMode && hasG1) { p2.isHotseat = true; p2.hotseatScheme = 'arrows'; p2.isAI = false; }
             else { p2.isAI = true; }
-            if (hasG2) { p3.isHotseat = true; p3.hotseatScheme = 'ijkl'; p3.isAI = false; }
+            if (onlineMode && hasG2) { p3.isNetRemote = true; p3.isAI = false; }
+            else if (!onlineMode && hasG2) { p3.isHotseat = true; p3.hotseatScheme = 'ijkl'; p3.isAI = false; }
             else { p3.isAI = true; }
+        } else if (net.role === 'client') {
+            // Client: chỉ điều khiển đội mình (input gửi host), vẫn đánh dấu isLocal để camera/HUD
+            localTeam = net.myTeam || localTeam;
+            p1.isAI = false; p2.isAI = false; p3.isAI = false;
+            p1.isNetPuppet = true; p2.isNetPuppet = true; p3.isNetPuppet = true;
+            if (localTeam === 1) p1.isLocal = true;
+            if (localTeam === 2) p2.isLocal = true;
+            if (localTeam === 3) p3.isLocal = true;
         } else if (localTeam === 2) {
-            p1.isAI = true;
-            p2.isLocal = true;
-            p3.isAI = true;
+            p1.isAI = true; p2.isLocal = true; p3.isAI = true;
         } else {
-            // guest đội vàng
             localTeam = 3;
-            p1.isAI = true;
-            p2.isAI = true;
-            p3.isLocal = true;
+            p1.isAI = true; p2.isAI = true; p3.isLocal = true;
         }
         players = [p1, p2, p3];
     } else {
@@ -3850,10 +4283,16 @@ function initMatch() {
             p1.isLocal = true; p1.isAI = false;
             p2.isLocal = false; p2.isAI = true;
             localTeam = 1;
-        } else if (isRoomHost) {
-            p1.isLocal = true; p1.isAI = false;
-            p2.isLocal = false; p2.isAI = false; p2.isHotseat = true;
+        } else if (net.role === 'host' || (net.role === 'offline' && isRoomHost)) {
             localTeam = 1;
+            p1.isLocal = true; p1.isAI = false;
+            if (onlineMode && net.connectedCount > 0) { p2.isNetRemote = true; p2.isAI = false; }
+            else { p2.isHotseat = true; p2.isAI = false; } // chưa có bạn online → cùng máy
+        } else if (net.role === 'client') {
+            localTeam = net.myTeam || 2;
+            p1.isNetPuppet = true; p2.isNetPuppet = true;
+            p1.isAI = false; p2.isAI = false;
+            p2.isLocal = true;
         } else {
             p1.isLocal = false; p1.isAI = true;
             p2.isLocal = true; p2.isAI = false;
@@ -4097,6 +4536,14 @@ function updateGame(dt) {
             } else {
                 addFloatingText(MAP_CX, MAP_CY, `${teamName(deadTeam)} BỊ LOẠI!`, teamHex(deadTeam), 22);
             }
+            if (net.role === 'host') {
+                net._sentOver = gameState === 'GAMEOVER';
+                netBroadcast(buildNetState());
+                if (gameState === 'GAMEOVER') {
+                    const winText = document.getElementById('winner-text');
+                    netBroadcast({ type: 'over', text: winText.innerText, color: winText.style.color });
+                }
+            }
         }
         break;
     }
@@ -4279,12 +4726,30 @@ function gameLoop() {
     updateVisualAmbience(t);
 
     if (gameState === 'PLAYING') {
-        updateGame(dt);
+        if (net.role === 'client') {
+            // Client: gửi input · không mô phỏng (nhận state từ host)
+            const inp = collectLocalNetInput();
+            if (inp && net.conns[0]) netSend(net.conns[0], inp);
+            // Vẫn cập nhật camera / HUD / FX
+            players.forEach(p => { if (p.dead && p.respawnTimer < 9000) {/* synced */} });
+        } else {
+            updateGame(dt);
+            if (net.role === 'host' && performance.now() - net.lastBroadcast > 50) {
+                net.lastBroadcast = performance.now();
+                netBroadcast(buildNetState());
+            }
+        }
         updateCamera(dt);
         updateHUD();
         drawFxOverlay();
+    } else if (gameState === 'GAMEOVER' && net.role === 'host') {
+        // gửi kết quả 1 lần
+        if (!net._sentOver) {
+            net._sentOver = true;
+            const winText = document.getElementById('winner-text');
+            netBroadcast({ type: 'over', text: winText ? winText.innerText : 'KẾT THÚC', color: winText ? winText.style.color : '#fff' });
+        }
     } else if (arenaBuilt) {
-        // Lobby: camera quay chậm quanh arena cho đẹp
         camYaw = 0.18 + Math.sin(t * 0.25) * 0.12;
         camLook.set(Math.sin(t * 0.15) * 2, 0.8, Math.cos(t * 0.12) * 1.5);
         const idleCam = getIdealCameraPos(camLook, 1.05, camYaw);
