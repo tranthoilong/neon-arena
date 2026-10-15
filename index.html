@@ -332,6 +332,13 @@
         }
         .btn:hover { transform: translateY(-2px); }
         .btn:active { transform: translateY(0); }
+        .btn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+            transform: none !important;
+            box-shadow: none !important;
+            filter: grayscale(0.4);
+        }
 
         .btn-primary {
             flex: 1;
@@ -973,34 +980,46 @@
         <div class="lobby-bg-orb o2"></div>
 
         <div class="brand-block">
-            <div class="tag">1v1 Arena · 3D · Same Keyboard</div>
+            <div class="tag">1v1 Arena · 3D</div>
             <h1>NEON ARENA</h1>
-            <p>Đấu trường 3D neon — tạo phòng, chọn tướng, phá hủy Nexus đối phương.</p>
+            <p>Đấu máy vs AI · Solo mời bạn · Phá hủy Nexus để thắng.</p>
         </div>
 
         <div class="lobby-actions">
             <!-- Home -->
             <div id="lobby-home" class="lobby-view active">
                 <div class="btn-row">
-                    <button class="btn btn-primary" id="btn-create-room">Tạo phòng</button>
-                    <button class="btn btn-danger" id="btn-show-join">Vào phòng</button>
+                    <button class="btn btn-primary" id="btn-mode-ai">Đấu máy</button>
+                    <button class="btn btn-danger" id="btn-mode-solo">Solo (PvP)</button>
                 </div>
-                <p class="lobby-hint">Desktop: chuột phải di chuyển · Q W E chiêu · A đánh thường<br>Mobile: joystick + nút chiêu · Đối thủ AI nếu chơi 1 mình</p>
+                <p class="lobby-hint">Đấu máy: vs AI thông minh · Solo: mời bạn bằng mã phòng mới chơi được<br>Desktop: chuột · A/Q/E · Mobile: joystick + nút chiêu</p>
+            </div>
+
+            <div id="lobby-solo-menu" class="lobby-view">
+                <div class="panel-glass">
+                    <div class="panel-title">SOLO · MỜI BẠN CHƠI</div>
+                    <div class="btn-row" style="margin-bottom:12px">
+                        <button class="btn btn-primary" id="btn-create-room">Tạo phòng</button>
+                        <button class="btn btn-danger" id="btn-show-join">Vào phòng</button>
+                    </div>
+                    <p class="lobby-hint" style="margin-top:0">Cần 2 người trong phòng mới bắt đầu được. Map Solo rộng hơn đấu máy.</p>
+                    <button class="btn btn-ghost btn-full" id="btn-back-solo-menu">Quay lại</button>
+                </div>
             </div>
 
             <!-- Create room -->
             <div id="lobby-create" class="lobby-view">
                 <div class="panel-glass">
-                    <div class="panel-title">PHÒNG CỦA BẠN</div>
+                    <div class="panel-title">PHÒNG SOLO</div>
                     <div class="room-code-display">
-                        <div class="label">Mã phòng</div>
+                        <div class="label">Mã mời bạn bè</div>
                         <div class="code" id="created-room-code">------</div>
                     </div>
                     <div class="room-status" id="host-status">
-                        <span class="dot"></span>Đang chờ đối thủ nhập mã…
+                        <span class="dot"></span>Đang chờ người chơi khác nhập mã…
                     </div>
                     <button class="btn btn-primary btn-full" id="btn-copy-code">Sao chép mã</button>
-                    <button class="btn btn-primary btn-full" id="btn-enter-draft-host" style="margin-top:10px">Vào chọn tướng</button>
+                    <button class="btn btn-primary btn-full" id="btn-enter-draft-host" style="margin-top:10px" disabled>Chờ đối thủ…</button>
                     <button class="btn btn-ghost btn-full" id="btn-back-from-create" style="margin-top:10px">Quay lại</button>
                 </div>
             </div>
@@ -1028,7 +1047,7 @@
                 Phòng <strong id="draft-room-code">LOCAL</strong>
             </div>
         </div>
-        <p class="draft-sub">Chọn tướng · Đấu trường 3D — phá hủy Nexus để chiến thắng</p>
+        <p class="draft-sub" id="draft-sub">Chọn tướng · Đấu trường 3D — phá hủy Nexus để chiến thắng</p>
 
         <div class="draft-body">
             <div class="player-panel p1">
@@ -1041,7 +1060,7 @@
             <div class="player-panel p2">
                 <div class="panel-header">
                     <h2>NGƯỜI CHƠI 2</h2>
-                    <span class="controls-hint">Đối thủ / AI<br><b>Đội đỏ</b></span>
+                    <span class="controls-hint" id="p2-draft-hint">Đối thủ / AI<br><b>Đội đỏ</b></span>
                 </div>
                 <div class="hero-grid" id="p2-grid"></div>
             </div>
@@ -1172,34 +1191,70 @@ function generateRoomCode() {
     for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
     return code;
 }
+let gameMode = 'AI'; // 'AI' | 'SOLO'
+let isRoomHost = true;
+let soloGuestReady = false;
+
 function goToDraft(code) {
     currentRoomCode = code;
     if (roomPollTimer) { clearInterval(roomPollTimer); roomPollTimer = null; }
-    document.getElementById('draft-room-code').textContent = code;
+    document.getElementById('draft-room-code').textContent =
+        gameMode === 'AI' ? 'VS AI' : code;
+    const sub = document.getElementById('draft-sub');
+    const hint = document.getElementById('p2-draft-hint');
+    if (gameMode === 'AI') {
+        sub.textContent = 'Chế độ Đấu máy · Map tiêu chuẩn · Phá hủy Nexus AI';
+        if (hint) hint.innerHTML = 'Máy (AI)<br><b>Đội đỏ thông minh</b>';
+    } else {
+        sub.textContent = 'Chế độ Solo · Map rộng · P1 chuột · P2 phím mũi tên + 123';
+        if (hint) hint.innerHTML = 'P2 hotseat<br><b>←↑↓→ · 1 2 3</b>';
+    }
     document.getElementById('lobby-screen').classList.add('hidden');
     document.getElementById('draft-screen').classList.remove('hidden');
     renderDraftUI();
 }
 
+document.getElementById('btn-mode-ai').addEventListener('click', () => {
+    gameMode = 'AI';
+    localTeam = 1;
+    isRoomHost = true;
+    goToDraft('AI');
+});
+
+document.getElementById('btn-mode-solo').addEventListener('click', () => {
+    gameMode = 'SOLO';
+    showLobbyView('lobby-solo-menu');
+});
+document.getElementById('btn-back-solo-menu').addEventListener('click', () => showLobbyView('lobby-home'));
+
 document.getElementById('btn-create-room').addEventListener('click', () => {
+    gameMode = 'SOLO';
+    isRoomHost = true;
+    soloGuestReady = false;
     let rooms = pruneOldRooms(getRooms());
     let code = generateRoomCode();
     while (rooms[code]) code = generateRoomCode();
-    rooms[code] = { created: Date.now(), hostReady: true, guestJoined: false };
+    rooms[code] = { created: Date.now(), hostReady: true, guestJoined: false, mode: 'SOLO' };
     saveRooms(rooms);
     currentRoomCode = code;
     document.getElementById('created-room-code').textContent = code;
-    document.getElementById('host-status').innerHTML = '<span class="dot"></span>Đang chờ đối thủ nhập mã…';
+    document.getElementById('host-status').innerHTML = '<span class="dot"></span>Đang chờ người chơi khác nhập mã…';
     document.getElementById('host-status').classList.remove('ready');
+    const enterBtn = document.getElementById('btn-enter-draft-host');
+    enterBtn.disabled = true;
+    enterBtn.textContent = 'Chờ đối thủ…';
     showLobbyView('lobby-create');
     if (roomPollTimer) clearInterval(roomPollTimer);
     roomPollTimer = setInterval(() => {
         const r = getRooms()[code];
         if (r && r.guestJoined) {
-            document.getElementById('host-status').innerHTML = 'Đối thủ đã vào phòng!';
+            soloGuestReady = true;
+            document.getElementById('host-status').innerHTML = 'Đối thủ đã vào! Có thể bắt đầu.';
             document.getElementById('host-status').classList.add('ready');
+            enterBtn.disabled = false;
+            enterBtn.textContent = 'Vào chọn tướng';
         }
-    }, 500);
+    }, 400);
 });
 document.getElementById('btn-copy-code').addEventListener('click', async () => {
     const code = document.getElementById('created-room-code').textContent;
@@ -1211,8 +1266,18 @@ document.getElementById('btn-copy-code').addEventListener('click', async () => {
         document.getElementById('btn-copy-code').textContent = code;
     }
 });
-document.getElementById('btn-enter-draft-host').addEventListener('click', () => { localTeam = 1; goToDraft(currentRoomCode || 'LOCAL'); });
+document.getElementById('btn-enter-draft-host').addEventListener('click', () => {
+    if (gameMode === 'SOLO' && !soloGuestReady) {
+        const r = getRooms()[currentRoomCode];
+        if (!(r && r.guestJoined)) return;
+        soloGuestReady = true;
+    }
+    localTeam = 1;
+    isRoomHost = true;
+    goToDraft(currentRoomCode || 'SOLO');
+});
 document.getElementById('btn-show-join').addEventListener('click', () => {
+    gameMode = 'SOLO';
     document.getElementById('join-error').textContent = '';
     document.getElementById('join-code-input').value = '';
     showLobbyView('lobby-join');
@@ -1229,7 +1294,10 @@ document.getElementById('btn-join-room').addEventListener('click', () => {
     rooms[raw] = room;
     saveRooms(rooms);
     errorEl.textContent = '';
+    gameMode = 'SOLO';
     localTeam = 2;
+    isRoomHost = false;
+    soloGuestReady = true;
     goToDraft(raw);
 });
 document.getElementById('join-code-input').addEventListener('keydown', e => {
@@ -1237,9 +1305,9 @@ document.getElementById('join-code-input').addEventListener('keydown', e => {
 });
 document.getElementById('btn-back-from-create').addEventListener('click', () => {
     if (roomPollTimer) clearInterval(roomPollTimer);
-    showLobbyView('lobby-home');
+    showLobbyView('lobby-solo-menu');
 });
-document.getElementById('btn-back-from-join').addEventListener('click', () => showLobbyView('lobby-home'));
+document.getElementById('btn-back-from-join').addEventListener('click', () => showLobbyView('lobby-solo-menu'));
 
 const HEROES = [
     { id:'ignis', name:'IGNIS', role:'Pháp Sư Hỏa Cầu', color:'#ff6b35', icon:'🔥', hp:950, speed:3.6, radius:20,
@@ -1286,21 +1354,48 @@ function createHeroCard(hero, isSelected, onClick) {
 }
 
 /* ========== 3D ENGINE ========== */
-const SCALE = 0.042;
-const MAP_W = 2800, MAP_H = 1600;
-const MAP_CX = MAP_W / 2, MAP_CY = MAP_H / 2;
-const bushes = [
-    { x: 900, y: 420, r: 70 },
-    { x: 1200, y: 420, r: 70 },
-    { x: 1600, y: 420, r: 70 },
-    { x: 1900, y: 420, r: 70 },
-    { x: 900, y: 1180, r: 70 },
-    { x: 1200, y: 1180, r: 70 },
-    { x: 1600, y: 1180, r: 70 },
-    { x: 1900, y: 1180, r: 70 },
-    { x: 1400, y: 700, r: 55 },
-    { x: 1400, y: 900, r: 55 }
-];
+let SCALE = 0.042;
+let MAP_W = 3200, MAP_H = 1800;
+let MAP_CX = MAP_W / 2, MAP_CY = MAP_H / 2;
+let bushes = [];
+
+function rebuildBushes() {
+    bushes = [];
+    const rows = [0.28, 0.72];
+    const cols = gameMode === 'SOLO' ? 8 : 5;
+    for (const ry of rows) {
+        for (let i = 0; i < cols; i++) {
+            const t = (i + 1) / (cols + 1);
+            bushes.push({
+                x: MAP_W * (0.18 + t * 0.64),
+                y: MAP_H * ry + (i % 2 ? 40 : -40),
+                r: 70 + (i % 3) * 8
+            });
+        }
+    }
+    // mid river bushes
+    bushes.push({ x: MAP_CX - 120, y: MAP_CY - 90, r: 58 });
+    bushes.push({ x: MAP_CX + 120, y: MAP_CY + 90, r: 58 });
+    if (gameMode === 'SOLO') {
+        bushes.push({ x: MAP_CX, y: MAP_CY - 220, r: 64 });
+        bushes.push({ x: MAP_CX, y: MAP_CY + 220, r: 64 });
+    }
+}
+
+function configureMapForMode() {
+    if (gameMode === 'SOLO') {
+        MAP_W = 4800; MAP_H = 2600; SCALE = 0.032;
+    } else {
+        MAP_W = 3400; MAP_H = 1900; SCALE = 0.038;
+    }
+    MAP_CX = MAP_W / 2;
+    MAP_CY = MAP_H / 2;
+    mouseMap = { x: MAP_CX, y: MAP_CY };
+    rebuildBushes();
+}
+
+rebuildBushes();
+
 function wx(x) { return (x - MAP_CX) * SCALE; }
 function wz(y) { return (y - MAP_CY) * SCALE; }
 function mapFromWorld(wxPos, wzPos) {
@@ -1318,6 +1413,7 @@ let mouseMap = { x: MAP_CX, y: MAP_CY };
 let joystick = { active: false, x: 0, y: 0, dx: 0, dy: 0 };
 let skillQueue = []; // {slot} or {aa:true}
 let inputBound = false;
+let arenaGroup = null;
 
 const container = document.getElementById('game-container');
 const viewport = document.getElementById('viewport');
@@ -1326,6 +1422,7 @@ const fx = fxCanvas.getContext('2d');
 
 let renderer, scene, camera, clock;
 let arenaBuilt = false;
+let arenaMapKey = "";
 let camLook = new THREE.Vector3(0, 0.5, 0);
 let screenShake = 0;
 let camZoom = 1;
@@ -1504,13 +1601,44 @@ function initThree() {
     }, { passive: false });
 }
 
+function clearArena() {
+    if (arenaGroup) {
+        scene.remove(arenaGroup);
+        arenaGroup.traverse(obj => {
+            if (obj.geometry) obj.geometry.dispose();
+            if (obj.material) {
+                if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+                else obj.material.dispose();
+            }
+        });
+        arenaGroup = null;
+    }
+    if (moveMarker) {
+        scene.remove(moveMarker);
+        moveMarker = null;
+    }
+    arenaBuilt = false;
+    arenaPulseMats = [];
+    fountainCores = [];
+    groundMesh = null;
+}
+
+function ensureArena() {
+    const key = `${gameMode}:${MAP_W}x${MAP_H}`;
+    if (arenaBuilt && arenaMapKey === key) return;
+    clearArena();
+    buildArena();
+    arenaMapKey = key;
+}
+
 function buildArena() {
-    if (arenaBuilt) return;
     arenaBuilt = true;
+    arenaGroup = new THREE.Group();
+    scene.add(arenaGroup);
 
     const groundTex = makeGridTexture();
-    groundTex.repeat.set(7, 4);
-    groundMesh = new THREE.Mesh(
+    groundTex.repeat.set(gameMode === 'SOLO' ? 10 : 7, gameMode === 'SOLO' ? 6 : 4);
+    const groundVis = new THREE.Mesh(
         new THREE.PlaneGeometry(MAP_W * SCALE * 1.15, MAP_H * SCALE * 1.2),
         new THREE.MeshStandardMaterial({
             map: groundTex,
@@ -1520,20 +1648,19 @@ function buildArena() {
             envMapIntensity: 0.8
         })
     );
-    groundMesh.rotation.x = -Math.PI / 2;
-    groundMesh.receiveShadow = true;
-    groundMesh.name = 'ground';
-    scene.add(groundMesh);
+    groundVis.rotation.x = -Math.PI / 2;
+    groundVis.receiveShadow = true;
+    groundVis.name = 'ground';
+    arenaGroup.add(groundVis);
 
-    // Invisible larger plane for easier click-to-move raycasts
     const clickPlane = new THREE.Mesh(
         new THREE.PlaneGeometry(MAP_W * SCALE * 1.4, MAP_H * SCALE * 1.4),
         new THREE.MeshBasicMaterial({ visible: false })
     );
     clickPlane.rotation.x = -Math.PI / 2;
     clickPlane.name = 'clickPlane';
-    scene.add(clickPlane);
-    groundMesh = clickPlane; // prefer click plane for raycast
+    arenaGroup.add(clickPlane);
+    groundMesh = clickPlane;
 
     moveMarker = new THREE.Mesh(
         new THREE.RingGeometry(0.55, 0.85, 32),
@@ -1554,13 +1681,13 @@ function buildArena() {
     });
     arenaPulseMats.push(laneMat);
     const lane = new THREE.Mesh(
-        new THREE.BoxGeometry(MAP_W * SCALE * 0.98, 0.22, 280 * SCALE),
+        new THREE.BoxGeometry(MAP_W * SCALE * 0.98, 0.22, Math.max(280, MAP_H * 0.22) * SCALE),
         laneMat
     );
     lane.position.set(0, 0.12, 0);
     lane.receiveShadow = true;
     lane.castShadow = true;
-    scene.add(lane);
+    arenaGroup.add(lane);
 
     // River with glow panels
     const riverMat = new THREE.MeshStandardMaterial({
@@ -1575,7 +1702,7 @@ function buildArena() {
     arenaPulseMats.push(riverMat);
     const river = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.12, MAP_H * SCALE * 0.92), riverMat);
     river.position.set(0, 0.18, 0);
-    scene.add(river);
+    arenaGroup.add(river);
 
     // Neon rim walls with pillars
     [[-1, 0x00e8ff], [1, 0xff2d55]].forEach(([side, col]) => {
@@ -1589,9 +1716,10 @@ function buildArena() {
         );
         rail.position.set(side * (MAP_W * SCALE * 0.54), 0.7, 0);
         rail.castShadow = true;
-        scene.add(rail);
+        arenaGroup.add(rail);
 
-        for (let i = -5; i <= 5; i++) {
+        const pillarN = gameMode === "SOLO" ? 8 : 5;
+        for (let i = -pillarN; i <= pillarN; i++) {
             const pillar = new THREE.Mesh(
                 new THREE.CylinderGeometry(0.28, 0.35, 2.4, 8),
                 new THREE.MeshStandardMaterial({
@@ -1601,14 +1729,14 @@ function buildArena() {
             );
             pillar.position.set(side * (MAP_W * SCALE * 0.54), 1.2, i * 6.2);
             pillar.castShadow = true;
-            scene.add(pillar);
+            arenaGroup.add(pillar);
 
             const cap = new THREE.Mesh(
                 new THREE.SphereGeometry(0.35, 12, 12),
                 new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 1.1 })
             );
             cap.position.set(side * (MAP_W * SCALE * 0.54), 2.5, i * 6.2);
-            scene.add(cap);
+            arenaGroup.add(cap);
         }
     });
 
@@ -1620,7 +1748,7 @@ function buildArena() {
         arenaPulseMats.push(lineMat);
         const line = new THREE.Mesh(new THREE.BoxGeometry(MAP_W * SCALE * 0.95, 0.08, 0.18), lineMat);
         line.position.set(0, 0.28, wz(y));
-        scene.add(line);
+        arenaGroup.add(line);
     });
 
     // Base platforms
@@ -1634,7 +1762,7 @@ function buildArena() {
         );
         pad.position.set(wx(x), 0.18, wz(MAP_CY));
         pad.receiveShadow = true;
-        scene.add(pad);
+        arenaGroup.add(pad);
     });
 
     createFountain(220, MAP_CY, 0x00e8ff);
@@ -1654,7 +1782,7 @@ function buildArena() {
         orb.position.set((Math.random() - 0.5) * 60, 3 + Math.random() * 8, (Math.random() - 0.5) * 35);
         orb.userData.baseY = orb.position.y;
         orb.userData.phase = Math.random() * Math.PI * 2;
-        scene.add(orb);
+        arenaGroup.add(orb);
         fountainCores.push(orb);
     }
 }
@@ -1706,7 +1834,7 @@ function createFountain(x, y, color) {
     g.userData.pulse = core;
     g.userData.crystal = crystal;
     fountainCores.push(core, crystal);
-    scene.add(g);
+    (arenaGroup || scene).add(g);
     return g;
 }
 
@@ -1745,7 +1873,7 @@ function createBush(b) {
     g.add(aura);
 
     g.position.set(wx(b.x), 0, wz(b.y));
-    scene.add(g);
+    (arenaGroup || scene).add(g);
 }
 
 function makeHealthBarSprite(width = 64) {
@@ -2180,6 +2308,8 @@ class Player {
         this.stunTimer = 0;
         this.dead = false; this.respawnTimer = 0;
         this.aiTimer = 0;
+        this.aiRetreat = false;
+        this.isHotseat = !!opts.isHotseat;
         this.mesh = createHeroMesh(heroData, team);
         this.mesh.position.set(wx(x), 0, wz(y));
         scene.add(this.mesh);
@@ -2263,24 +2393,142 @@ class Player {
     updateAI(dt) {
         this.aiTimer -= dt;
         const enemy = players.find(p => p.team !== this.team && !p.dead);
-        const enemyTower = towers.find(t => t.team !== this.team);
-        let target = enemy;
-        if (enemy && Math.hypot(enemy.x - this.x, enemy.y - this.y) < 520) {
+        const myTower = towers.find(t => t.team === this.team && t.isNexus);
+        const enemyOuter = towers.filter(t => t.team !== this.team && !t.isNexus).sort((a, b) =>
+            Math.hypot(a.x - this.x, a.y - this.y) - Math.hypot(b.x - this.x, b.y - this.y)
+        )[0];
+        const enemyNexus = towers.find(t => t.team !== this.team && t.isNexus);
+        const enemyMinions = minions.filter(m => m.team !== this.team);
+        const allyMinions = minions.filter(m => m.team === this.team);
+
+        const hpRatio = this.hp / this.maxHp;
+        const inFountain = Math.hypot(this.x - this.spawnX, this.y - this.spawnY) < 140;
+
+        // --- Hồi máu / rút về ---
+        if (hpRatio < 0.28 || (this.aiRetreat && hpRatio < 0.55)) {
+            this.aiRetreat = hpRatio < 0.7;
+            this.moveToward(this.spawnX, this.spawnY, dt, 40);
+            this.aimAngle = enemy ? Math.atan2(enemy.y - this.y, enemy.x - this.x) : this.aimAngle;
+            // Volt/Sylph: dùng chiêu thoát hiểm khi bị đuổi
+            if (enemy && Math.hypot(enemy.x - this.x, enemy.y - this.y) < 280) {
+                if (this.hero.id === 'volt' && this.cds[1] <= 0) {
+                    this.aimAngle = Math.atan2(this.spawnY - this.y, this.spawnX - this.x);
+                    this.tryCast(1);
+                } else if (this.hero.id === 'aegis' && this.cds[1] <= 0) this.tryCast(1);
+            }
+            return;
+        }
+        this.aiRetreat = false;
+
+        // Đứng fountain chờ đủ máu
+        if (inFountain && hpRatio < 0.85) {
+            if (enemy && Math.hypot(enemy.x - this.x, enemy.y - this.y) < 500 && this.cds[0] <= 0) {
+                this.aimAngle = Math.atan2(enemy.y - this.y, enemy.x - this.x);
+                this.tryCast(0);
+            }
+            return;
+        }
+
+        // --- Chọn mục tiêu thông minh ---
+        let target = null;
+        let mode = 'push'; // farm | poke | allin | push | objective
+
+        // Last-hit lính yếu
+        let lh = null, lhScore = 1e9;
+        for (const m of enemyMinions) {
+            const d = Math.hypot(m.x - this.x, m.y - this.y);
+            if (d < 380 && m.hp <= 90 + this.level * 8 && d < lhScore) {
+                lh = m; lhScore = d;
+            }
+        }
+
+        const enemyDist = enemy ? Math.hypot(enemy.x - this.x, enemy.y - this.y) : 9999;
+        const enemyHp = enemy ? enemy.hp / enemy.maxHp : 1;
+        const underEnemyTower = enemyOuter && Math.hypot(this.x - enemyOuter.x, this.y - enemyOuter.y) < enemyOuter.range * 0.9;
+
+        if (lh && (!enemy || enemyDist > 320 || enemyHp > 0.45)) {
+            target = lh; mode = 'farm';
+        } else if (enemy && enemyDist < 620) {
             target = enemy;
-        } else if (enemyTower) {
-            target = enemyTower;
+            mode = (enemyHp < 0.35 && hpRatio > 0.4) ? 'allin' : 'poke';
+        } else if (enemyOuter) {
+            target = enemyOuter; mode = 'push';
+        } else if (enemyNexus) {
+            target = enemyNexus; mode = 'objective';
         }
         if (!target) return;
+
+        // Không dive trụ khi máu thấp / thiếu lính
+        if (underEnemyTower && hpRatio < 0.55 && allyMinions.filter(m =>
+            Math.hypot(m.x - (enemyOuter?.x || 0), m.y - (enemyOuter?.y || 0)) < 220
+        ).length < 2 && mode !== 'allin') {
+            const safeX = this.spawnX * 0.25 + this.x * 0.75;
+            this.moveToward(safeX, MAP_CY, dt, 30);
+            if (enemy && enemyDist < 400 && this.cds[0] <= 0) {
+                this.aimAngle = Math.atan2(enemy.y - this.y, enemy.x - this.x);
+                this.tryCast(0);
+            }
+            return;
+        }
+
+        // Tầm chiến đấu theo tướng
+        const ranged = this.hero.id === 'ignis' || this.hero.id === 'sylph';
+        const prefer = mode === 'farm' ? 90
+            : mode === 'poke' ? (ranged ? 260 : 170)
+            : mode === 'allin' ? (ranged ? 200 : 110)
+            : 160;
+
         const dist = Math.hypot(target.x - this.x, target.y - this.y);
-        const prefer = 180 + this.radius;
-        if (dist > prefer) this.moveToward(target.x, target.y, dt, prefer);
-        this.aimAngle = Math.atan2(target.y - this.y, target.x - this.x);
-        if (dist < 420) {
-            if (this.cds[0] <= 0) this.tryCast(0);
-            if (this.aiTimer <= 0) {
-                this.aiTimer = 1.2 + Math.random() * 1.5;
-                if (this.cds[1] <= 0 && Math.random() < 0.55) this.tryCast(1);
-                else if (this.cds[2] <= 0 && Math.random() < 0.35) this.tryCast(2);
+
+        // Kiting: poke thì lui khi địch lại gần
+        if (mode === 'poke' && enemy && enemyDist < prefer * 0.72 && ranged) {
+            const away = Math.atan2(this.y - enemy.y, this.x - enemy.x);
+            this.moveToward(this.x + Math.cos(away) * 80, this.y + Math.sin(away) * 80, dt, 8);
+        } else if (dist > prefer) {
+            // Đi lệch nhẹ khỏi mid để né skill
+            const jitter = Math.sin(matchTime * 1.7 + this.team) * 55;
+            this.moveToward(target.x, target.y + jitter, dt, prefer);
+        }
+
+        // Aim dự đoán hướng địch
+        let aimX = target.x, aimY = target.y;
+        if (target === enemy && enemy) {
+            aimX += Math.cos(enemy.aimAngle || 0) * 25;
+            aimY += Math.sin(enemy.aimAngle || 0) * 25;
+        }
+        this.aimAngle = Math.atan2(aimY - this.y, aimX - this.x);
+
+        // Combat
+        const inRange = dist < (mode === 'farm' ? 240 : 440);
+        if (inRange && this.cds[0] <= 0) this.tryCast(0);
+
+        if (this.aiTimer <= 0 && inRange) {
+            this.aiTimer = 0.55 + Math.random() * 0.7;
+            const canQ = this.cds[1] <= 0;
+            const canE = this.cds[2] <= 0;
+
+            if (mode === 'allin') {
+                if (canQ) this.tryCast(1);
+                if (canE && (enemyHp < 0.5 || dist < 220)) this.tryCast(2);
+            } else if (mode === 'poke') {
+                if (canQ && dist < 380) this.tryCast(1);
+                if (canE && enemyHp < 0.45 && dist < 300) this.tryCast(2);
+            } else if (mode === 'push' || mode === 'objective') {
+                if (canQ && dist < 300) this.tryCast(1);
+                if (canE && dist < 250 && Math.random() < 0.4) this.tryCast(2);
+            } else if (mode === 'farm') {
+                if (canQ && dist < 200 && Math.random() < 0.25) this.tryCast(1);
+            }
+
+            // Aegis shield chủ động
+            if (this.hero.id === 'aegis' && canQ && hpRatio < 0.6 && enemyDist < 350) this.tryCast(1);
+        }
+
+        // Nhặt heal rune nếu đi ngang và máu thiếu
+        if (healRune.active && hpRatio < 0.75) {
+            const rd = Math.hypot(healRune.x - this.x, healRune.y - this.y);
+            if (rd < 420 && (!enemy || enemyDist > 280)) {
+                this.moveToward(healRune.x, healRune.y, dt, 12);
             }
         }
     }
@@ -2345,10 +2593,32 @@ class Player {
         if (this.stunTimer > 0) { this.stunTimer -= dt; this.syncMesh(); return; }
 
         if (this.isLocal) this.updateLocal(dt);
+        else if (this.isHotseat) this.updateHotseat(dt);
         else if (this.isAI) this.updateAI(dt);
 
         this.clampPos();
         this.syncMesh();
+    }
+    updateHotseat(dt) {
+        let dx = 0, dy = 0;
+        if (keys['ArrowUp']) dy -= 1;
+        if (keys['ArrowDown']) dy += 1;
+        if (keys['ArrowLeft']) dx -= 1;
+        if (keys['ArrowRight']) dx += 1;
+        if (dx || dy) {
+            const len = Math.hypot(dx, dy);
+            this.x += (dx / len) * this.speed * (dt * 60);
+            this.y += (dy / len) * this.speed * (dt * 60);
+            this.aimAngle = Math.atan2(dy, dx);
+        }
+        const enemy = players.find(p => p.team !== this.team && !p.dead);
+        let ang = this.aimAngle;
+        if (enemy && Math.hypot(enemy.x - this.x, enemy.y - this.y) < 480) {
+            ang = Math.atan2(enemy.y - this.y, enemy.x - this.x);
+        }
+        if (keys['Digit1'] && this.cds[0] <= 0) { this.aimAngle = ang; this.castSkill(0, ang, ang); }
+        if (keys['Digit2'] && this.cds[1] <= 0) { this.aimAngle = ang; this.castSkill(1, ang, ang); }
+        if (keys['Digit3'] && this.cds[2] <= 0) { this.aimAngle = ang; this.castSkill(2, ang, ang); }
     }
     syncMesh() {
         const inBush = bushes.some(b => Math.hypot(this.x - b.x, this.y - b.y) < b.r);
@@ -2636,26 +2906,50 @@ function bindGameInput() {
 
 function initMatch() {
     if (!renderer) initThree();
+    configureMapForMode();
+    ensureArena();
     clearMatchEntities();
     gameState = 'PLAYING';
     matchTime = 0;
     lastWaveTime = -12;
-    camZoom = 0.92;
+    camZoom = gameMode === 'SOLO' ? 1.05 : 0.92;
     camYaw = 0.2;
     skillQueue = [];
     joystick.active = false;
 
     const h1 = HEROES[p1Pick], h2 = HEROES[p2Pick];
-    const p1 = new Player(1, h1, 220, MAP_CY, { isLocal: localTeam === 1, isAI: localTeam !== 1 });
-    const p2 = new Player(2, h2, MAP_W - 220, MAP_CY, { isLocal: localTeam === 2, isAI: localTeam !== 2 });
+    const vsAI = gameMode === 'AI';
+    const p1 = new Player(1, h1, 260, MAP_CY, { isLocal: false, isAI: false });
+    const p2 = new Player(2, h2, MAP_W - 260, MAP_CY, { isLocal: false, isAI: false });
+
+    if (vsAI) {
+        p1.isLocal = true; p1.isAI = false;
+        p2.isLocal = false; p2.isAI = true;
+        localTeam = 1;
+    } else if (isRoomHost) {
+        // Solo cùng máy: P1 chuột · P2 phím ←↑↓→ + 1/2/3
+        p1.isLocal = true; p1.isAI = false;
+        p2.isLocal = false; p2.isAI = false; p2.isHotseat = true;
+        localTeam = 1;
+    } else {
+        p1.isLocal = false; p1.isAI = true;
+        p2.isLocal = true; p2.isAI = false;
+        localTeam = 2;
+    }
     players = [p1, p2];
 
+    const nexusDist = gameMode === 'SOLO' ? 720 : 560;
+    const outerDist = gameMode === 'SOLO' ? 1400 : 1050;
     towers = [
-        new Tower(1, 520, MAP_CY, true),
-        new Tower(2, MAP_W - 520, MAP_CY, true),
-        new Tower(1, 980, MAP_CY, false),
-        new Tower(2, MAP_W - 980, MAP_CY, false)
+        new Tower(1, nexusDist, MAP_CY, true),
+        new Tower(2, MAP_W - nexusDist, MAP_CY, true),
+        new Tower(1, outerDist, MAP_CY, false),
+        new Tower(2, MAP_W - outerDist, MAP_CY, false)
     ];
+    if (gameMode === 'SOLO') {
+        towers.push(new Tower(1, 2100, MAP_CY, false));
+        towers.push(new Tower(2, MAP_W - 2100, MAP_CY, false));
+    }
 
     healRune = { x: MAP_CX, y: MAP_CY, r: 18, active: true, respawnTimer: 0, mesh: createHealRuneMesh() };
 
@@ -2688,9 +2982,10 @@ function updateGame(dt) {
     matchTime += dt;
     if (matchTime - lastWaveTime >= 14) {
         lastWaveTime = matchTime;
+        const gate = gameMode === 'SOLO' ? 1450 : 1100;
         for (let i = -1; i <= 1; i++) {
-            minions.push(new Minion(1, 980, MAP_CY + i * 42));
-            minions.push(new Minion(2, MAP_W - 980, MAP_CY + i * 42));
+            minions.push(new Minion(1, gate, MAP_CY + i * 42));
+            minions.push(new Minion(2, MAP_W - gate, MAP_CY + i * 42));
         }
     }
 
