@@ -1283,11 +1283,12 @@
             <div id="lobby-solo-menu" class="lobby-view">
                 <div class="panel-glass">
                     <div class="panel-title">SOLO · MỜI BẠN CHƠI</div>
-                    <div class="btn-row" style="margin-bottom:12px">
-                        <button class="btn btn-primary" id="btn-create-room">Tạo phòng</button>
-                        <button class="btn btn-danger" id="btn-show-join">Vào phòng</button>
+                    <div class="btn-row" style="margin-bottom:12px;flex-wrap:wrap">
+                        <button class="btn btn-primary" id="btn-create-room">Tạo phòng Online</button>
+                        <button class="btn btn-danger" id="btn-show-join">Vào phòng Online</button>
+                        <button class="btn btn-ghost" id="btn-solo-hotseat">Cùng máy</button>
                     </div>
-                    <p class="lobby-hint" style="margin-top:0">Online P2P (PeerJS) — gửi mã cho bạn máy khác. Hoặc cùng máy: host bắt đầu, P2 dùng ←↑↓→.</p>
+                    <p class="lobby-hint" style="margin-top:0">Online: 2 máy khác mạng (GitHub Pages + PeerJS). Host tạo mã → bạn nhập mã.<br>Cùng máy: 1 trình duyệt · P2 dùng ←↑↓→.</p>
                     <button class="btn btn-ghost btn-full" id="btn-back-solo-menu">Quay lại</button>
                 </div>
             </div>
@@ -1297,11 +1298,11 @@
                     <div class="panel-title">1v1v1 · TAM GIÁC</div>
                     <div class="btn-row" style="margin-bottom:12px;flex-wrap:wrap">
                         <button class="btn btn-primary" id="btn-ffa-ai">Đấu 2 AI</button>
-                        <button class="btn btn-primary" id="btn-ffa-create" style="background:linear-gradient(135deg,#f5c518,#ff6b35);border:none;color:#1a1200">Tạo phòng Online</button>
-                        <button class="btn btn-danger" id="btn-ffa-join">Vào phòng Online</button>
-                        <button class="btn btn-ghost" id="btn-ffa-hotseat">Cùng máy (hotseat)</button>
+                        <button class="btn btn-primary" id="btn-ffa-create" style="background:linear-gradient(135deg,#f5c518,#ff6b35);border:none;color:#1a1200">Tạo Online</button>
+                        <button class="btn btn-danger" id="btn-ffa-join">Vào Online</button>
+                        <button class="btn btn-ghost" id="btn-ffa-hotseat">Hotseat 3 người</button>
                     </div>
-                    <p class="lobby-hint" style="margin-top:0">Online: mã phòng gửi bạn (máy khác). Cùng máy: P2 ←↑↓→ · P3 IJKL · slot trống = AI.</p>
+                    <p class="lobby-hint" style="margin-top:0">Online: máy khác mạng. Slot trống = AI. Hotseat = 3 người cùng máy (P2 ←↑↓→ · P3 IJKL).</p>
                     <button class="btn btn-ghost btn-full" id="btn-back-ffa-menu">Quay lại</button>
                 </div>
             </div>
@@ -1524,7 +1525,21 @@ let pendingRoomMode = 'SOLO';
 let ffaRoomSeats = { guest1: false, guest2: false };
 let onlineMode = false; // true = PeerJS online
 
-/* ========== ONLINE (PeerJS) ========== */
+/* ========== ONLINE (PeerJS) — GitHub Pages OK, không cần backend ========== */
+const PEER_CLOUD = {
+    host: '0.peerjs.com',
+    port: 443,
+    path: '/',
+    secure: true,
+    debug: 0,
+    config: {
+        iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun.cloudflare.com:3478' }
+        ]
+    }
+};
 const net = {
     role: 'offline', // offline | host | client
     peer: null,
@@ -1534,10 +1549,12 @@ const net = {
     lastBroadcast: 0,
     connectedCount: 0,
     myTeam: 1,
-    pendingStart: null
+    pendingStart: null,
+    _connectTimer: null,
+    peerReady: false
 };
 function peerRoomId(code) {
-    return 'neonarena' + String(code).toLowerCase();
+    return 'neonarena-' + String(code).toLowerCase();
 }
 function netSend(conn, msg) {
     if (conn && conn.open) {
@@ -1548,6 +1565,7 @@ function netBroadcast(msg) {
     net.conns.forEach(c => netSend(c, msg));
 }
 function netDestroy() {
+    if (net._connectTimer) { clearTimeout(net._connectTimer); net._connectTimer = null; }
     net.conns.forEach(c => { try { c.close(); } catch (_) {} });
     if (net.peer) { try { net.peer.destroy(); } catch (_) {} }
     net.peer = null;
@@ -1556,6 +1574,8 @@ function netDestroy() {
     net.remoteInputs = {};
     net.role = 'offline';
     net.connectedCount = 0;
+    net.peerReady = false;
+    onlineMode = false;
 }
 function updateOnlineHostStatus() {
     const el = document.getElementById('host-status');
@@ -1654,59 +1674,138 @@ function onNetMessage(conn, msg) {
 }
 function hostOnlineRoom(code) {
     netDestroy();
+    onlineMode = true;
     net.role = 'host';
     net.myTeam = 1;
     localTeam = 1;
     isRoomHost = true;
     currentRoomCode = code;
     const el = document.getElementById('host-status');
-    if (el) el.innerHTML = '<span class="dot"></span>Đang mở phòng Online…';
+    const btn = document.getElementById('btn-enter-draft-host');
+    if (el) el.innerHTML = '<span class="dot"></span>Đang nối server PeerJS…';
+    if (btn) { btn.disabled = true; btn.textContent = 'Đang mở phòng…'; }
     if (typeof Peer === 'undefined') {
-        if (el) el.innerHTML = 'Không tải được PeerJS — kiểm tra mạng, hoặc chơi Cùng máy.';
+        if (el) el.innerHTML = 'Không tải được PeerJS (CDN). Kiểm tra mạng rồi thử lại.';
         net.role = 'offline';
+        onlineMode = false;
         return;
     }
-    const peer = new Peer(peerRoomId(code), { debug: 0 });
+    net._connectTimer = setTimeout(() => {
+        if (net.role === 'host' && !net.peerReady) {
+            if (el) el.innerHTML = 'Server PeerJS chậm. Bấm Quay lại rồi Tạo phòng lại.';
+            if (btn) { btn.disabled = false; btn.textContent = 'Thử bắt đầu (slot = AI)'; }
+        }
+    }, 20000);
+    let peer;
+    try {
+        peer = new Peer(peerRoomId(code), PEER_CLOUD);
+    } catch (e) {
+        if (el) el.innerHTML = 'Không tạo được Peer: ' + (e.message || e);
+        onlineMode = false;
+        return;
+    }
     net.peer = peer;
     peer.on('open', () => {
-        if (el) el.innerHTML = '<span class="dot"></span>Phòng Online sẵn sàng · chờ bạn kết nối…';
+        net.peerReady = true;
+        if (net._connectTimer) { clearTimeout(net._connectTimer); net._connectTimer = null; }
+        if (el) el.innerHTML = '<span class="dot"></span>Phòng Online sẵn sàng · gửi mã cho bạn (máy khác)…';
         updateOnlineHostStatus();
     });
-    peer.on('connection', (conn) => wireNetConn(conn, true));
+    peer.on('connection', (conn) => {
+        wireNetConn(conn, true);
+    });
     peer.on('error', (err) => {
-        const msg = (err && err.type) === 'unavailable-id'
-            ? 'Mã phòng đang được dùng — tạo mã khác.'
-            : ('Lỗi Online: ' + (err.message || err.type || 'unknown'));
+        const t = err && err.type;
+        let msg = 'Lỗi Online: ' + (err.message || t || 'unknown');
+        if (t === 'unavailable-id') msg = 'Mã đang được dùng — Quay lại tạo mã mới.';
+        else if (t === 'network' || t === 'server-error') msg = 'Mất kết nối PeerJS cloud. Thử lại sau.';
+        else if (t === 'peer-unavailable') msg = 'Peer không tồn tại.';
         if (el) el.innerHTML = msg;
+        if (t === 'unavailable-id') {
+            onlineMode = false;
+            net.peerReady = false;
+        }
+    });
+    peer.on('disconnected', () => {
+        if (el && net.role === 'host') el.innerHTML = '<span class="dot"></span>Mất tín hiệu server — đang thử nối lại…';
+        try { peer.reconnect(); } catch (_) {}
     });
 }
 function joinOnlineRoom(code) {
     netDestroy();
+    onlineMode = true;
     net.role = 'client';
     isRoomHost = false;
     currentRoomCode = code;
     const errorEl = document.getElementById('join-error');
     if (typeof Peer === 'undefined') {
-        if (errorEl) errorEl.textContent = 'Không tải được PeerJS. Kiểm tra mạng.';
+        if (errorEl) errorEl.textContent = 'Không tải được PeerJS (CDN). Kiểm tra mạng.';
         net.role = 'offline';
+        onlineMode = false;
         return;
     }
-    if (errorEl) errorEl.textContent = 'Đang kết nối Online…';
-    const peer = new Peer({ debug: 0 });
+    if (errorEl) errorEl.textContent = 'Đang kết nối Online… (host phải mở phòng trước)';
+    let attempts = 0;
+    const maxAttempts = 6;
+    net._connectTimer = setTimeout(() => {
+        const stillJoining = net.role === 'client' && document.getElementById('lobby-join')?.classList.contains('active');
+        if (stillJoining) {
+            if (errorEl) errorEl.textContent = 'Hết thời gian. Host giữ trang Tạo phòng + mã đúng, rồi Tham gia lại.';
+        }
+    }, 25000);
+    let peer;
+    try {
+        peer = new Peer(PEER_CLOUD);
+    } catch (e) {
+        if (errorEl) errorEl.textContent = 'Không tạo Peer: ' + (e.message || e);
+        onlineMode = false;
+        return;
+    }
     net.peer = peer;
-    peer.on('open', () => {
+
+    function tryConnect() {
+        if (net.role !== 'client' || !net.peer) return;
+        attempts++;
+        if (errorEl) errorEl.textContent = `Đang tìm host ${code}… (lần ${attempts}/${maxAttempts})`;
         const conn = peer.connect(peerRoomId(code), { reliable: true });
         net.conns = [conn];
         wireNetConn(conn, false);
         conn.on('open', () => {
-            if (errorEl) errorEl.textContent = 'Đã kết nối — chờ vào draft…';
+            if (net._connectTimer) { clearTimeout(net._connectTimer); net._connectTimer = null; }
+            if (errorEl) errorEl.textContent = 'Đã kết nối host — vào draft…';
         });
         conn.on('error', () => {
-            if (errorEl) errorEl.textContent = 'Không kết nối được host. Kiểm tra mã / firewall.';
+            if (attempts < maxAttempts && net.role === 'client') {
+                setTimeout(tryConnect, 1500);
+            } else if (errorEl) {
+                errorEl.textContent = 'Không kết nối DataConnection. Kiểm tra mã / host còn mở phòng.';
+            }
         });
+        // PeerJS đôi khi không báo error khi host chưa sẵn sàng — poll lại
+        setTimeout(() => {
+            if (net.role === 'client' && !conn.open && attempts < maxAttempts &&
+                document.getElementById('lobby-join')?.classList.contains('active')) {
+                try { conn.close(); } catch (_) {}
+                tryConnect();
+            }
+        }, 2500);
+    }
+
+    peer.on('open', () => {
+        net.peerReady = true;
+        tryConnect();
     });
     peer.on('error', (err) => {
-        if (errorEl) errorEl.textContent = 'Lỗi Peer: ' + (err.message || err.type || 'thử lại');
+        const t = err && err.type;
+        if (t === 'peer-unavailable') {
+            if (attempts < maxAttempts && net.role === 'client') {
+                setTimeout(tryConnect, 1500);
+            } else if (errorEl) {
+                errorEl.textContent = 'Không thấy host. Host tạo phòng trước và giữ trang mở.';
+            }
+        } else if (errorEl) {
+            errorEl.textContent = 'Lỗi Peer: ' + (err.message || t || 'thử lại');
+        }
     });
 }
 function collectLocalNetInput() {
@@ -1904,18 +2003,38 @@ function goToDraft(code) {
         sub.textContent = 'Chế độ Đấu máy · Map tiêu chuẩn · Phá hủy Nexus AI';
         if (hint) hint.innerHTML = 'Máy (AI)<br><b>Đội đỏ thông minh</b>';
     } else if (gameMode === 'FFA') {
-        const room = currentRoomCode && getRooms()[currentRoomCode];
-        const g1 = !!(room && room.guestJoined) || ffaRoomSeats.guest1;
-        const g2 = !!(room && room.guest2Joined) || ffaRoomSeats.guest2;
-        sub.textContent = isRoomHost
-            ? `1v1v1 phòng ${code || ''} · Slot trống = AI · P2 ←↑↓→ · P3 IJKL`
-            : `1v1v1 · Bạn là đội ${localTeam === 2 ? 'đỏ' : 'vàng'} · Phá Nexus cuối cùng thắng`;
-        if (hint) hint.innerHTML = (isRoomHost && g1) || localTeam === 2
-            ? 'Người chơi<br><b>←↑↓→ · 1 2 3</b>'
-            : 'AI / Bạn<br><b>Đội đỏ</b>';
-        if (hint3) hint3.innerHTML = (isRoomHost && g2) || localTeam === 3
-            ? 'Người chơi<br><b>IJKL · 7 8 9</b>'
-            : 'AI / Bạn<br><b>Đội vàng</b>';
+        const g1 = onlineMode
+            ? (ffaRoomSeats.guest1 || [...net.teamOfConn.values()].includes(2) || localTeam === 2)
+            : ffaRoomSeats.guest1;
+        const g2 = onlineMode
+            ? (ffaRoomSeats.guest2 || [...net.teamOfConn.values()].includes(3) || localTeam === 3)
+            : ffaRoomSeats.guest2;
+        if (onlineMode) {
+            sub.textContent = net.role === 'host'
+                ? `1v1v1 Online · Mã ${code} · Slot trống = AI`
+                : `1v1v1 Online · Đội ${localTeam === 2 ? 'đỏ' : 'vàng'} · Chờ host Bắt đầu`;
+            if (hint) hint.innerHTML = localTeam === 2 || (net.role === 'host' && g1)
+                ? 'Online<br><b>WASD · F Q E</b>' : 'AI / chờ<br><b>Đội đỏ</b>';
+            if (hint3) hint3.innerHTML = localTeam === 3 || (net.role === 'host' && g2)
+                ? 'Online<br><b>WASD · F Q E</b>' : 'AI / chờ<br><b>Đội vàng</b>';
+        } else {
+            sub.textContent = isRoomHost
+                ? `1v1v1 phòng ${code || ''} · Slot trống = AI · P2 ←↑↓→ · P3 IJKL`
+                : `1v1v1 · Bạn là đội ${localTeam === 2 ? 'đỏ' : 'vàng'} · Phá Nexus cuối cùng thắng`;
+            if (hint) hint.innerHTML = (isRoomHost && g1) || localTeam === 2
+                ? 'Người chơi<br><b>←↑↓→ · 1 2 3</b>'
+                : 'AI / Bạn<br><b>Đội đỏ</b>';
+            if (hint3) hint3.innerHTML = (isRoomHost && g2) || localTeam === 3
+                ? 'Người chơi<br><b>IJKL · 7 8 9</b>'
+                : 'AI / Bạn<br><b>Đội vàng</b>';
+        }
+    } else if (onlineMode) {
+        sub.textContent = net.role === 'host'
+            ? `Online · Mã ${code} · Chờ bạn vào rồi Bắt đầu`
+            : `Online · Bạn là đội đỏ · Chờ host Bắt đầu`;
+        if (hint) hint.innerHTML = net.role === 'client'
+            ? 'Bạn (Online)<br><b>WASD · F Q E</b>'
+            : 'Bạn Online<br><b>Chờ / AI nếu trống</b>';
     } else {
         sub.textContent = 'Chế độ Solo · Map rộng · P1 chuột · P2 phím mũi tên + 123';
         if (hint) hint.innerHTML = 'P2 hotseat<br><b>←↑↓→ · 1 2 3</b>';
@@ -1982,26 +2101,29 @@ document.getElementById('btn-mode-solo').addEventListener('click', () => {
 document.getElementById('btn-back-solo-menu').addEventListener('click', () => showLobbyView('lobby-home'));
 
 function startCreateRoom(mode) {
+    // Online PeerJS — 2 máy khác mạng (GitHub Pages)
+    if (roomPollTimer) { clearInterval(roomPollTimer); roomPollTimer = null; }
     pendingRoomMode = mode;
     gameMode = mode;
     isRoomHost = true;
     soloGuestReady = false;
     onlineMode = true;
     ffaRoomSeats = { guest1: false, guest2: false };
-    if (roomPollTimer) { clearInterval(roomPollTimer); roomPollTimer = null; }
-    let code = generateRoomCode();
+    const code = generateRoomCode();
     currentRoomCode = code;
     document.getElementById('create-room-title').textContent = mode === 'FFA' ? 'PHÒNG 1v1v1 ONLINE' : 'PHÒNG SOLO ONLINE';
     document.getElementById('created-room-code').textContent = code;
     document.getElementById('host-status').classList.remove('ready');
+    document.getElementById('host-status').innerHTML = '<span class="dot"></span>Đang mở phòng Online…';
     const enterBtn = document.getElementById('btn-enter-draft-host');
-    enterBtn.disabled = false;
-    enterBtn.textContent = 'Vào chọn tướng (trống = AI)';
+    enterBtn.disabled = true;
+    enterBtn.textContent = 'Đang mở phòng…';
     showLobbyView('lobby-create');
     hostOnlineRoom(code);
 }
 
 function openJoinRoom(mode) {
+    if (roomPollTimer) { clearInterval(roomPollTimer); roomPollTimer = null; }
     pendingRoomMode = mode;
     gameMode = mode;
     onlineMode = true;
@@ -2014,6 +2136,17 @@ function openJoinRoom(mode) {
 
 document.getElementById('btn-create-room').addEventListener('click', () => startCreateRoom('SOLO'));
 document.getElementById('btn-show-join').addEventListener('click', () => openJoinRoom('SOLO'));
+document.getElementById('btn-solo-hotseat')?.addEventListener('click', () => {
+    netDestroy();
+    onlineMode = false;
+    gameMode = 'SOLO';
+    localTeam = 1;
+    isRoomHost = true;
+    currentRoomCode = null;
+    soloGuestReady = true; // P2 hotseat cùng máy
+    ffaRoomSeats = { guest1: false, guest2: false };
+    goToDraft('SOLO-HOTSEAT');
+});
 
 document.getElementById('btn-copy-code').addEventListener('click', async () => {
     const code = document.getElementById('created-room-code').textContent;
@@ -2039,8 +2172,8 @@ document.getElementById('btn-join-room').addEventListener('click', () => {
     const raw = document.getElementById('join-code-input').value.trim().toUpperCase();
     const errorEl = document.getElementById('join-error');
     if (!/^[A-Z0-9]{6}$/.test(raw)) { errorEl.textContent = 'Mã phòng gồm đúng 6 ký tự.'; return; }
-    onlineMode = true;
     gameMode = pendingRoomMode;
+    onlineMode = true;
     joinOnlineRoom(raw);
 });
 document.getElementById('join-code-input').addEventListener('keydown', e => {
@@ -2048,9 +2181,13 @@ document.getElementById('join-code-input').addEventListener('keydown', e => {
 });
 document.getElementById('btn-back-from-create').addEventListener('click', () => {
     if (roomPollTimer) clearInterval(roomPollTimer);
+    netDestroy();
     showLobbyView(pendingRoomMode === 'FFA' ? 'lobby-ffa-menu' : 'lobby-solo-menu');
 });
 document.getElementById('btn-back-from-join').addEventListener('click', () => {
+    netDestroy();
+    const err = document.getElementById('join-error');
+    if (err) err.textContent = '';
     showLobbyView(pendingRoomMode === 'FFA' ? 'lobby-ffa-menu' : 'lobby-solo-menu');
 });
 
